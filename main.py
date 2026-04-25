@@ -7,6 +7,7 @@ from sources.nosdeputes import get_nosdeputes_info
 from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
+from sources.propositions import get_propositions_info
 
 app = FastAPI(
     title="Politician API",
@@ -38,6 +39,7 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
         get_hatvp_info(name),
         get_news_info(name),
         get_casier_politique_info(name),
+        get_propositions_info(name),
         return_exceptions=True
     )
 
@@ -46,11 +48,12 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
             return {"erreur": str(result)}
         return result
 
-    wikipedia  = safe(results[0])
-    nosdeputes = safe(results[1])
-    hatvp      = safe(results[2])
-    news       = safe(results[3])
-    casier     = safe(results[4])
+    wikipedia    = safe(results[0])
+    nosdeputes   = safe(results[1])
+    hatvp        = safe(results[2])
+    news         = safe(results[3])
+    casier       = safe(results[4])
+    propositions = safe(results[5])
 
     return {
         "recherche": name,
@@ -66,8 +69,11 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
             },
             "mandats": {
                 "mandats_en_cours": nosdeputes.get("mandats_en_cours", []),
+                "anciens_mandats":  nosdeputes.get("anciens_mandats", []),
+                "autres_mandats":   nosdeputes.get("autres_mandats", []),
                 "cumul_mandats":    nosdeputes.get("cumul_mandats"),
                 "nombre_mandats":   nosdeputes.get("nombre_mandats"),
+                "groupe":           nosdeputes.get("groupe"),
                 "source":           nosdeputes.get("source_url"),
             },
             "activite_parlementaire": {
@@ -75,8 +81,10 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
                 "participations":   nosdeputes.get("participations"),
                 "jetons":           nosdeputes.get("jetons"),
                 "votes":            nosdeputes.get("votes", []),
-                "propositions_loi": nosdeputes.get("propositions_loi", []),
-                "source":           nosdeputes.get("source_url"),
+                "propositions_loi": propositions.get("propositions", []),
+                "amendements":      propositions.get("amendements", []),
+                "source_votes":     nosdeputes.get("source_url"),
+                "source_props":     propositions.get("source_url"),
             },
             "indemnites": {
                 "declarations": hatvp.get("declarations", []),
