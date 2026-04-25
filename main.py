@@ -8,6 +8,7 @@ from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
 from sources.propositions import get_propositions_info
+from cache import get_cache, set_cache, cache_stats
 
 app = FastAPI(
     title="Politician API",
@@ -26,13 +27,28 @@ app.add_middleware(
 def root():
     return {"message": "Politician API — utilisez /politician?name=Prénom+Nom"}
 
+@app.get("/cache/stats")
+def get_cache_stats():
+    return cache_stats()
+
 @app.get("/politician")
-async def get_politician(name: str = Query(..., description="Nom complet de la personnalité politique")):
+async def get_politician(
+    name:    str  = Query(..., description="Nom complet de la personnalité politique"),
+    refresh: bool = Query(False, description="Forcer le rechargement depuis les sources")
+):
     if not name or len(name.strip()) < 3:
         raise HTTPException(status_code=400, detail="Le nom doit contenir au moins 3 caractères")
 
     name = name.strip()
 
+    # Vérification du cache (sauf si refresh=true)
+    if not refresh:
+        cached = get_cache(name, "politician")
+        if cached:
+            cached["cache"] = True
+            return cached
+
+    # Lancement parallèle de toutes les sources
     results = await asyncio.gather(
         get_wikipedia_info(name),
         get_nosdeputes_info(name),
@@ -55,8 +71,9 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
     casier       = safe(results[4])
     propositions = safe(results[5])
 
-    return {
+    response = {
         "recherche": name,
+        "cache":     False,
         "resultats": {
             "identite": {
                 "nom":            wikipedia.get("nom"),
@@ -106,3 +123,8 @@ async def get_politician(name: str = Query(..., description="Nom complet de la p
             },
         }
     }
+
+    # Stockage en cache
+    set_cache(name, response, "politician")
+
+    return response
