@@ -8,6 +8,7 @@ from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
 from sources.propositions import get_propositions_info
+from sources.bord_politique import get_bord_politique
 from cache import get_cache, set_cache, cache_stats
 
 app = FastAPI(
@@ -78,7 +79,7 @@ async def get_politician(
             "identite": {
                 "nom":            wikipedia.get("nom"),
                 "parti":          wikipedia.get("parti") or nosdeputes.get("parti"),
-                "bord_politique": wikipedia.get("bord_politique"),
+                "bord_politique": wikipedia.get("bord_politique") or get_bord_politique(nosdeputes.get("parti")),
                 "naissance":      wikipedia.get("naissance"),
                 "photo":          wikipedia.get("photo"),
                 "resume":         wikipedia.get("resume"),

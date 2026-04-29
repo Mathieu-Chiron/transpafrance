@@ -1,4 +1,5 @@
 import httpx
+from sources.bord_politique import get_bord_politique
 from typing import Optional
 
 SOURCE_URL = "https://fr.wikipedia.org"
@@ -41,7 +42,7 @@ async def get_wikipedia_info(name: str) -> dict:
                 "resume":         summary_data.get("extract"),
                 "photo":          summary_data.get("thumbnail", {}).get("source"),
                 "parti":          wikidata.get("parti"),
-                "bord_politique": wikidata.get("bord_politique"),
+                "bord_politique": get_bord_politique(wikidata.get("parti") or summary_data.get("parti")),
                 "naissance":      wikidata.get("naissance"),
                 "source_url":     summary_data.get("content_urls", {}).get("desktop", {}).get("page", SOURCE_URL),
             }
