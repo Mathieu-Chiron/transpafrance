@@ -34,6 +34,147 @@ def root():
 def get_cache_stats():
     return cache_stats()
 
+@app.get("/politicians")
+async def get_politicians(
+    type_mandat: str  = Query(None, description="depute, senateur, maire, europeen"),
+    parti:       str  = Query(None),
+    bord:        str  = Query(None),
+    page:        int  = Query(1),
+    page_size:   int  = Query(50),
+):
+    from sources.bord_politique import get_bord_politique
+    import httpx, redis as redis_lib, json as json_mod
+
+    RESSOURCES = {
+        "depute":   "1ac42ff4-1336-44f8-a221-832039dbc142",
+        "senateur": "b78f8945-509f-4609-a4a7-3048b8370479",
+        "maire":    "2876a346-d50c-4911-934e-19ee07b0e503",
+        "europeen": "70957bb0-f19f-40c5-b97b-90b3d4d71f9e",
+    }
+
+    # Pour les maires (34 637 entrées), on délègue la pagination à l'API externe.
+    # Pour les autres types (<1000), on charge tout puis on filtre/pagine localement.
+    LARGE = {"maire"}
+
+    BASE_URL = "https://tabular-api.data.gouv.fr/api/resources/{}/data/"
+
+    if type_mandat and type_mandat in RESSOURCES:
+        ressources = {type_mandat: RESSOURCES[type_mandat]}
+    else:
+        ressources = RESSOURCES
+
+    try:
+        r_cache = redis_lib.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    except Exception:
+        r_cache = None
+
+    def build_elu(row, label):
+        prenom      = row.get("Prénom de l'élu", "") or ""
+        nom_famille = row.get("Nom de l'élu", "") or ""
+        nom_complet = (prenom + " " + nom_famille).strip()
+        parti_elu   = row.get("Libellé du groupe politique", "") or ""
+        bord_elu    = get_bord_politique(parti_elu) if parti_elu else None
+
+        nb_condamnations = None
+        condamne         = None
+        if r_cache:
+            try:
+                cache_key = f"politico:condamnations:{nom_complet.lower().replace(' ', '_')}"
+                cached    = r_cache.get(cache_key)
+                if cached:
+                    cond_data        = json_mod.loads(cached)
+                    nb_condamnations = cond_data.get("nb", 0)
+                    condamne         = nb_condamnations > 0
+                else:
+                    nb_condamnations = 0
+                    condamne         = False
+            except Exception:
+                pass
+
+        return {
+            "nom":              nom_complet,
+            "prenom":           prenom,
+            "nom_famille":      nom_famille,
+            "type_mandat":      label,
+            "departement":      row.get("Libellé du département"),
+            "commune":          row.get("Libellé de la commune"),
+            "parti":            parti_elu,
+            "bord":             bord_elu,
+            "debut_mandat":     row.get("Date de début du mandat"),
+            "naissance":        row.get("Date de naissance"),
+            "nb_condamnations": nb_condamnations,
+            "condamne":         condamne,
+        }
+
+    elus  = []
+    total = 0
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        for label, rid in ressources.items():
+            try:
+                if label in LARGE:
+                    # Pagination serveur pour les maires (34 637 entrées)
+                    resp = await client.get(
+                        BASE_URL.format(rid),
+                        params={"page_size": page_size, "page": page}
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data      = resp.json()
+                    total    += data.get("meta", {}).get("total", 0)
+                    for row in data.get("data", []):
+                        e = build_elu(row, label)
+                        if parti and parti.lower() not in (e["parti"] or "").lower():
+                            continue
+                        elus.append(e)
+                else:
+                    # Chargement complet en parallèle pour les petits datasets
+                    # (depute 577, senateur 348, europeen 81) — page_size 100 max fiable
+                    BATCH = 100
+                    resp0 = await client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": 1})
+                    if resp0.status_code != 200:
+                        continue
+                    data0     = resp0.json()
+                    api_total = data0.get("meta", {}).get("total", 0)
+                    all_rows  = list(data0.get("data", []))
+
+                    nb_pages = (api_total + BATCH - 1) // BATCH
+                    if nb_pages > 1:
+                        tasks     = [
+                            client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": p})
+                            for p in range(2, nb_pages + 1)
+                        ]
+                        responses = await asyncio.gather(*tasks, return_exceptions=True)
+                        for r in responses:
+                            if isinstance(r, Exception) or r.status_code != 200:
+                                continue
+                            all_rows.extend(r.json().get("data", []))
+
+                    for row in all_rows:
+                        e = build_elu(row, label)
+                        if parti and parti.lower() not in (e["parti"] or "").lower():
+                            continue
+                        if bord and (not e["bord"] or bord.lower() not in e["bord"].lower()):
+                            continue
+                        elus.append(e)
+
+            except Exception as exc:
+                print(f"[POLITICIANS] Erreur {label}: {exc}")
+                continue
+
+    if not any(label in LARGE for label in ressources):
+        # Pagination locale (petits datasets)
+        total = len(elus)
+        start = (page - 1) * page_size
+        elus  = elus[start:start + page_size]
+
+    return {
+        "total": total,
+        "page":  page,
+        "elus":  elus,
+    }
+
+
 @app.get("/politician")
 async def get_politician(
     name:    str  = Query(..., description="Nom complet de la personnalité politique"),
@@ -64,7 +205,7 @@ async def get_politician(
 
     def safe(result):
         if isinstance(result, Exception):
-            return {"erreur": str(result)}
+            return {}
         return result
 
     wikipedia    = safe(results[0])
@@ -78,9 +219,8 @@ async def get_politician(
 
     parti = wikipedia.get("parti") or nosdeputes.get("parti")
 
-    # Détermine le type de mandat pour les indemnités
-    mandats_rne = rne.get("mandats", [])
-    type_mandat = "depute"
+    mandats_rne  = rne.get("mandats", [])
+    type_mandat  = "depute"
     for m in mandats_rne:
         if "Sénateur" in m.get("type", ""):
             type_mandat = "senateur"
@@ -132,7 +272,7 @@ async def get_politician(
             "condamnations": {
                 "trouve":        casier.get("trouve"),
                 "condamnations": casier.get("condamnations", []),
-                "source":        casier.get("source_url"),
+                "source_url":    casier.get("source_url"),
             },
             "affaires_et_condamnations_presse": {
                 "articles": news.get("affaires", []),
