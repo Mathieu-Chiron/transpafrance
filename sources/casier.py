@@ -3,35 +3,27 @@ from playwright.async_api import async_playwright
 
 SOURCE_URL = "https://casier-politique.fr"
 
-async def get_casier_politique_info(name: str) -> dict:
-    """
-    Scrape casier-politique.fr en cherchant le nom dans la liste des condamnations.
-    """
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(SOURCE_URL)
-            await page.wait_for_timeout(4000)
+async def _scrape_avec_timeout(name: str) -> list:
+    """Scrape avec timeout strict de 20 secondes."""
+    nom_lower = name.lower()
+    condamnations = []
 
-            # Récupère tout le texte visible
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        page.set_default_timeout(8000)
+
+        try:
+            await page.goto(SOURCE_URL, wait_until="networkidle", timeout=10000)
+            await page.wait_for_timeout(2000)
+
             texte = await page.evaluate("document.body.innerText")
-
-            # Cherche le nom dans le texte
-            nom_lower = name.lower()
             lignes = texte.split("\n")
 
-            condamnations = []
             i = 0
             while i < len(lignes):
-                ligne = lignes[i]
-                if nom_lower in ligne.lower():
-                    # Récupère les lignes suivantes pour le contexte
-                    bloc = []
-                    for j in range(i, min(i + 10, len(lignes))):
-                        l = lignes[j].strip()
-                        if l:
-                            bloc.append(l)
+                if nom_lower in lignes[i].lower():
+                    bloc = [l.strip() for l in lignes[i:i+10] if l.strip()]
                     condamnations.append({
                         "description": " | ".join(bloc),
                         "source":      SOURCE_URL,
@@ -41,19 +33,36 @@ async def get_casier_politique_info(name: str) -> dict:
                 else:
                     i += 1
 
+        except Exception as e:
+            print(f"[CASIER] Erreur page 1: {e}")
+        finally:
             await browser.close()
 
-            if not condamnations:
-                # Tente de naviguer sur les pages suivantes
-                condamnations = await _chercher_toutes_pages(name)
+    return condamnations
 
-            return {
-                "trouve":        len(condamnations) > 0,
-                "condamnations": condamnations,
-                "note":          "Source : casier-politique.fr — base de données des condamnations politiques",
-                "source_url":    SOURCE_URL,
-            }
 
+async def get_casier_politique_info(name: str) -> dict:
+    try:
+        # Timeout global de 25 secondes
+        condamnations = await asyncio.wait_for(
+            _scrape_avec_timeout(name),
+            timeout=25
+        )
+
+        return {
+            "trouve":        len(condamnations) > 0,
+            "condamnations": condamnations,
+            "note":          "Source : casier-politique.fr",
+            "source_url":    SOURCE_URL,
+        }
+
+    except asyncio.TimeoutError:
+        return {
+            "trouve":        False,
+            "note":          "Timeout — casier-politique.fr trop lent",
+            "condamnations": [],
+            "source_url":    SOURCE_URL,
+        }
     except Exception as e:
         return {
             "trouve":        False,
@@ -61,51 +70,3 @@ async def get_casier_politique_info(name: str) -> dict:
             "condamnations": [],
             "source_url":    SOURCE_URL,
         }
-
-
-async def _chercher_toutes_pages(name: str) -> list:
-    """Parcourt jusqu'à 16 pages pour trouver le nom."""
-    condamnations = []
-    nom_lower = name.lower()
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(SOURCE_URL)
-        await page.wait_for_timeout(4000)
-
-        for num_page in range(2, 17):
-            try:
-                # Clique sur le numéro de page
-                await page.get_by_text(str(num_page), exact=True).first.click()
-                await page.wait_for_timeout(2000)
-
-                texte = await page.evaluate("document.body.innerText")
-                lignes = texte.split("\n")
-
-                i = 0
-                while i < len(lignes):
-                    if nom_lower in lignes[i].lower():
-                        bloc = []
-                        for j in range(i, min(i + 10, len(lignes))):
-                            l = lignes[j].strip()
-                            if l:
-                                bloc.append(l)
-                        condamnations.append({
-                            "description": " | ".join(bloc),
-                            "source":      SOURCE_URL,
-                            "url":         SOURCE_URL,
-                        })
-                        i += 10
-                    else:
-                        i += 1
-
-                if condamnations:
-                    break
-
-            except Exception:
-                continue
-
-        await browser.close()
-
-    return condamnations

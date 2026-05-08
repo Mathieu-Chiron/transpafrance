@@ -35,6 +35,7 @@ PARTIS_BORD = {
     "LR":                            "Droite",
     "RPR":                           "Droite",
     "UMP":                           "Droite",
+    "Union pour un mouvement populaire":  "Droite",
     "RPR/UMP/LR":                    "Droite",
     "Debout la France":              "Droite nationale",
 

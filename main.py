@@ -8,6 +8,7 @@ from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
 from sources.propositions import get_propositions_info
+from sources.rne import get_rne_info
 from sources.bord_politique import get_bord_politique
 from cache import get_cache, set_cache, cache_stats
 
@@ -42,14 +43,12 @@ async def get_politician(
 
     name = name.strip()
 
-    # Vérification du cache (sauf si refresh=true)
     if not refresh:
         cached = get_cache(name, "politician")
         if cached:
             cached["cache"] = True
             return cached
 
-    # Lancement parallèle de toutes les sources
     results = await asyncio.gather(
         get_wikipedia_info(name),
         get_nosdeputes_info(name),
@@ -57,6 +56,7 @@ async def get_politician(
         get_news_info(name),
         get_casier_politique_info(name),
         get_propositions_info(name),
+        get_rne_info(name),
         return_exceptions=True
     )
 
@@ -71,6 +71,10 @@ async def get_politician(
     news         = safe(results[3])
     casier       = safe(results[4])
     propositions = safe(results[5])
+    rne          = safe(results[6])
+
+    # Parti depuis Wikipedia ou NosDéputés
+    parti = wikipedia.get("parti") or nosdeputes.get("parti")
 
     response = {
         "recherche": name,
@@ -78,21 +82,23 @@ async def get_politician(
         "resultats": {
             "identite": {
                 "nom":            wikipedia.get("nom"),
-                "parti":          wikipedia.get("parti") or nosdeputes.get("parti"),
-                "bord_politique": wikipedia.get("bord_politique") or get_bord_politique(nosdeputes.get("parti")),
-                "naissance":      wikipedia.get("naissance"),
+                "parti":          parti,
+                "bord_politique": wikipedia.get("bord_politique") or get_bord_politique(parti),
+                "naissance":      wikipedia.get("naissance") or rne.get("date_naissance"),
                 "photo":          wikipedia.get("photo"),
                 "resume":         wikipedia.get("resume"),
+                "profession":     rne.get("profession"),
                 "source":         wikipedia.get("source_url"),
             },
             "mandats": {
-                "mandats_en_cours": nosdeputes.get("mandats_en_cours", []),
+                "mandats_rne":      rne.get("mandats", []),
+                "cumul_mandats":    rne.get("cumul_mandats") or nosdeputes.get("cumul_mandats"),
+                "nombre_mandats":   rne.get("nombre_mandats") or nosdeputes.get("nombre_mandats"),
                 "anciens_mandats":  nosdeputes.get("anciens_mandats", []),
                 "autres_mandats":   nosdeputes.get("autres_mandats", []),
-                "cumul_mandats":    nosdeputes.get("cumul_mandats"),
-                "nombre_mandats":   nosdeputes.get("nombre_mandats"),
                 "groupe":           nosdeputes.get("groupe"),
-                "source":           nosdeputes.get("source_url"),
+                "source_rne":       rne.get("source_url"),
+                "source_deputes":   nosdeputes.get("source_url"),
             },
             "activite_parlementaire": {
                 "presences":        nosdeputes.get("presences"),
@@ -125,7 +131,5 @@ async def get_politician(
         }
     }
 
-    # Stockage en cache
     set_cache(name, response, "politician")
-
     return response
