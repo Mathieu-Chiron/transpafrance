@@ -9,6 +9,7 @@ from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
 from sources.propositions import get_propositions_info
 from sources.rne import get_rne_info
+from sources.activite import get_activite_info
 from sources.bord_politique import get_bord_politique
 from cache import get_cache, set_cache, cache_stats
 
@@ -57,6 +58,7 @@ async def get_politician(
         get_casier_politique_info(name),
         get_propositions_info(name),
         get_rne_info(name),
+        get_activite_info(name),
         return_exceptions=True
     )
 
@@ -72,9 +74,17 @@ async def get_politician(
     casier       = safe(results[4])
     propositions = safe(results[5])
     rne          = safe(results[6])
+    activite     = safe(results[7])
 
-    # Parti depuis Wikipedia ou NosDéputés
     parti = wikipedia.get("parti") or nosdeputes.get("parti")
+
+    # Détermine le type de mandat pour les indemnités
+    mandats_rne = rne.get("mandats", [])
+    type_mandat = "depute"
+    for m in mandats_rne:
+        if "Sénateur" in m.get("type", ""):
+            type_mandat = "senateur"
+            break
 
     response = {
         "recherche": name,
@@ -91,28 +101,33 @@ async def get_politician(
                 "source":         wikipedia.get("source_url"),
             },
             "mandats": {
-                "mandats_rne":      rne.get("mandats", []),
-                "cumul_mandats":    rne.get("cumul_mandats") or nosdeputes.get("cumul_mandats"),
-                "nombre_mandats":   rne.get("nombre_mandats") or nosdeputes.get("nombre_mandats"),
-                "anciens_mandats":  nosdeputes.get("anciens_mandats", []),
-                "autres_mandats":   nosdeputes.get("autres_mandats", []),
-                "groupe":           nosdeputes.get("groupe"),
-                "source_rne":       rne.get("source_url"),
-                "source_deputes":   nosdeputes.get("source_url"),
+                "mandats_rne":     mandats_rne,
+                "cumul_mandats":   rne.get("cumul_mandats") or nosdeputes.get("cumul_mandats"),
+                "nombre_mandats":  rne.get("nombre_mandats") or nosdeputes.get("nombre_mandats"),
+                "anciens_mandats": nosdeputes.get("anciens_mandats", []),
+                "autres_mandats":  nosdeputes.get("autres_mandats", []),
+                "groupe":          nosdeputes.get("groupe"),
+                "source_rne":      rne.get("source_url"),
+                "source_deputes":  nosdeputes.get("source_url"),
             },
             "activite_parlementaire": {
-                "presences":        nosdeputes.get("presences"),
-                "participations":   nosdeputes.get("participations"),
-                "jetons":           nosdeputes.get("jetons"),
+                "stats_moyennes":   activite.get("stats_moyennes", {}),
+                "stats_totales":    activite.get("stats_totales", {}),
+                "periode":          activite.get("periode"),
                 "votes":            nosdeputes.get("votes", []),
                 "propositions_loi": propositions.get("propositions", []),
                 "amendements":      propositions.get("amendements", []),
+                "note":             activite.get("note"),
+                "source_activite":  activite.get("source_url"),
                 "source_votes":     nosdeputes.get("source_url"),
                 "source_props":     propositions.get("source_url"),
             },
             "indemnites": {
+                "type_mandat":  type_mandat,
+                "montants":     activite.get("indemnites", {}),
                 "declarations": hatvp.get("declarations", []),
-                "source":       hatvp.get("source_url"),
+                "note":         "Montants légaux fixes — identiques pour tous les parlementaires du même type",
+                "source_hatvp": hatvp.get("source_url"),
             },
             "condamnations": {
                 "trouve":        casier.get("trouve"),
