@@ -11,6 +11,7 @@ from sources.propositions import get_propositions_info
 from sources.rne import get_rne_info
 from sources.activite import get_activite_info
 from sources.bord_politique import get_bord_politique
+from sources.groupes import get_groupes_mapping
 from cache import get_cache, set_cache, cache_stats
 
 app = FastAPI(
@@ -34,6 +35,14 @@ def root():
 def get_cache_stats():
     return cache_stats()
 
+@app.get("/debug/groupes")
+async def debug_groupes():
+    dep, sen = await get_groupes_mapping()
+    sample_dep = dict(list(dep.items())[:5])
+    sample_sen = dict(list(sen.items())[:5])
+    return {"deputes_count": len(dep), "senateurs_count": len(sen),
+            "deputes_sample": sample_dep, "senateurs_sample": sample_sen}
+
 @app.get("/politicians")
 async def get_politicians(
     type_mandat: str  = Query(None, description="depute, senateur, maire, europeen"),
@@ -44,6 +53,8 @@ async def get_politicians(
 ):
     from sources.bord_politique import get_bord_politique
     import httpx, redis as redis_lib, json as json_mod
+
+    dep_groupes, sen_groupes = await get_groupes_mapping()
 
     RESSOURCES = {
         "depute":   "1ac42ff4-1336-44f8-a221-832039dbc142",
@@ -73,7 +84,22 @@ async def get_politicians(
         nom_famille = row.get("Nom de l'élu", "") or ""
         nom_complet = (prenom + " " + nom_famille).strip()
         parti_elu   = row.get("Libellé du groupe politique", "") or ""
-        bord_elu    = get_bord_politique(parti_elu) if parti_elu else None
+
+        # Enrichissement depuis nosdeputes / sénat si le RNE n'a pas le groupe
+        bord_elu = None
+        if not parti_elu:
+            key = f"{prenom.strip().lower()}|{nom_famille.strip().lower()}"
+            if label == "depute":
+                info = dep_groupes.get(key, {})
+            elif label == "senateur":
+                info = sen_groupes.get(key, {})
+            else:
+                info = {}
+            parti_elu = info.get("parti") or ""
+            bord_elu  = info.get("bord")  # bord déjà résolu par groupes.py
+
+        if not bord_elu and parti_elu:
+            bord_elu = get_bord_politique(parti_elu)
 
         nb_condamnations = None
         condamne         = None
@@ -106,67 +132,106 @@ async def get_politicians(
             "condamne":         condamne,
         }
 
+    async def fetch_all_pages(client, rid):
+        """Charge toutes les pages d'un petit dataset en parallèle (BATCH=100)."""
+        BATCH = 100
+        resp0 = await client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": 1})
+        if resp0.status_code != 200:
+            return []
+        data0     = resp0.json()
+        api_total = data0.get("meta", {}).get("total", 0)
+        rows      = list(data0.get("data", []))
+        nb_pages  = (api_total + BATCH - 1) // BATCH
+        if nb_pages > 1:
+            resps = await asyncio.gather(*[
+                client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": p})
+                for p in range(2, nb_pages + 1)
+            ], return_exceptions=True)
+            for r in resps:
+                if not isinstance(r, Exception) and r.status_code == 200:
+                    rows.extend(r.json().get("data", []))
+        return rows
+
     elus  = []
     total = 0
 
-    async with httpx.AsyncClient(timeout=20) as client:
-        for label, rid in ressources.items():
+    # Petits datasets (depute, senateur, europeen) : toujours charger les 3
+    # pour détecter les cumuls, puis filtrer par type demandé.
+    SMALL = {k: v for k, v in RESSOURCES.items() if k not in LARGE}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+
+        # ── Petits datasets ──────────────────────────────────────────────────
+        try:
+            fetches = await asyncio.gather(*[
+                fetch_all_pages(client, rid) for rid in SMALL.values()
+            ], return_exceptions=True)
+
+            # Grouper par personne (prénom+nom normalisé) pour détecter le cumul
+            persons = {}
+            for label, rows in zip(SMALL.keys(), fetches):
+                if isinstance(rows, Exception):
+                    continue
+                for row in rows:
+                    prenom  = (row.get("Prénom de l'élu", "") or "").strip()
+                    nom_f   = (row.get("Nom de l'élu", "") or "").strip()
+                    key     = f"{prenom.lower()}|{nom_f.lower()}"
+                    if key not in persons:
+                        e = build_elu(row, label)
+                        e["type_mandats"] = [label]
+                        persons[key] = e
+                    else:
+                        if label not in persons[key]["type_mandats"]:
+                            persons[key]["type_mandats"].append(label)
+
+            # Filtre type_mandat : ne garder que ceux qui ont ce mandat
+            small_elus = list(persons.values())
+            if type_mandat and type_mandat in SMALL:
+                small_elus = [e for e in small_elus if type_mandat in e["type_mandats"]]
+
+            # Filtres bord / parti
+            for e in small_elus:
+                if parti and parti.lower() not in (e["parti"] or "").lower():
+                    continue
+                if bord and (not e["bord"] or bord.lower() not in e["bord"].lower()):
+                    continue
+                elus.append(e)
+
+        except Exception as exc:
+            print(f"[POLITICIANS] Erreur petits datasets: {exc}")
+
+        # ── Maires (large dataset, pagination serveur) ───────────────────────
+        if not type_mandat or type_mandat == "maire":
             try:
-                if label in LARGE:
-                    # Pagination serveur pour les maires (34 637 entrées)
-                    resp = await client.get(
-                        BASE_URL.format(rid),
-                        params={"page_size": page_size, "page": page}
-                    )
-                    if resp.status_code != 200:
-                        continue
-                    data      = resp.json()
-                    total    += data.get("meta", {}).get("total", 0)
+                resp = await client.get(
+                    BASE_URL.format(RESSOURCES["maire"]),
+                    params={"page_size": page_size, "page": page}
+                )
+                if resp.status_code == 200:
+                    data   = resp.json()
+                    total += data.get("meta", {}).get("total", 0)
                     for row in data.get("data", []):
-                        e = build_elu(row, label)
+                        e = build_elu(row, "maire")
+                        e["type_mandats"] = ["maire"]
                         if parti and parti.lower() not in (e["parti"] or "").lower():
                             continue
                         elus.append(e)
-                else:
-                    # Chargement complet en parallèle pour les petits datasets
-                    # (depute 577, senateur 348, europeen 81) — page_size 100 max fiable
-                    BATCH = 100
-                    resp0 = await client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": 1})
-                    if resp0.status_code != 200:
-                        continue
-                    data0     = resp0.json()
-                    api_total = data0.get("meta", {}).get("total", 0)
-                    all_rows  = list(data0.get("data", []))
-
-                    nb_pages = (api_total + BATCH - 1) // BATCH
-                    if nb_pages > 1:
-                        tasks     = [
-                            client.get(BASE_URL.format(rid), params={"page_size": BATCH, "page": p})
-                            for p in range(2, nb_pages + 1)
-                        ]
-                        responses = await asyncio.gather(*tasks, return_exceptions=True)
-                        for r in responses:
-                            if isinstance(r, Exception) or r.status_code != 200:
-                                continue
-                            all_rows.extend(r.json().get("data", []))
-
-                    for row in all_rows:
-                        e = build_elu(row, label)
-                        if parti and parti.lower() not in (e["parti"] or "").lower():
-                            continue
-                        if bord and (not e["bord"] or bord.lower() not in e["bord"].lower()):
-                            continue
-                        elus.append(e)
-
             except Exception as exc:
-                print(f"[POLITICIANS] Erreur {label}: {exc}")
-                continue
+                print(f"[POLITICIANS] Erreur maire: {exc}")
 
-    if not any(label in LARGE for label in ressources):
-        # Pagination locale (petits datasets)
+    # Pagination locale pour les petits datasets
+    if type_mandat != "maire" and not (not type_mandat):
         total = len(elus)
         start = (page - 1) * page_size
         elus  = elus[start:start + page_size]
+    elif type_mandat is None:
+        # Tous les types : petits datasets paginés localement + maires côté serveur
+        small_part = [e for e in elus if "maire" not in e["type_mandats"]]
+        maire_part = [e for e in elus if "maire" in e["type_mandats"]]
+        total     += len(small_part)
+        start      = (page - 1) * page_size
+        small_part = small_part[start:start + page_size]
+        elus       = small_part + maire_part
 
     return {
         "total": total,
@@ -217,7 +282,8 @@ async def get_politician(
     rne          = safe(results[6])
     activite     = safe(results[7])
 
-    parti = wikipedia.get("parti") or nosdeputes.get("parti")
+    groupe_parlementaire = nosdeputes.get("groupe")
+    parti = wikipedia.get("parti") or nosdeputes.get("parti") or groupe_parlementaire
 
     mandats_rne  = rne.get("mandats", [])
     type_mandat  = "depute"
@@ -231,14 +297,15 @@ async def get_politician(
         "cache":     False,
         "resultats": {
             "identite": {
-                "nom":            wikipedia.get("nom"),
-                "parti":          parti,
-                "bord_politique": wikipedia.get("bord_politique") or get_bord_politique(parti),
-                "naissance":      wikipedia.get("naissance") or rne.get("date_naissance"),
-                "photo":          wikipedia.get("photo"),
-                "resume":         wikipedia.get("resume"),
-                "profession":     rne.get("profession"),
-                "source":         wikipedia.get("source_url"),
+                "nom":                 wikipedia.get("nom"),
+                "parti":               parti,
+                "groupe_parlementaire": groupe_parlementaire,
+                "bord_politique":      wikipedia.get("bord_politique") or get_bord_politique(parti) or get_bord_politique(groupe_parlementaire),
+                "naissance":           wikipedia.get("naissance") or rne.get("date_naissance"),
+                "photo":               wikipedia.get("photo"),
+                "resume":              wikipedia.get("resume"),
+                "profession":          rne.get("profession"),
+                "source":              wikipedia.get("source_url"),
             },
             "mandats": {
                 "mandats_rne":     mandats_rne,
