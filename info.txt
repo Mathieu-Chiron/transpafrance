@@ -1,0 +1,50 @@
+Pourquoi relier un élu à son parti politique est compliqué
+===========================================================
+
+1. Le RNE (Répertoire National des Élus) ne contient pas d'information sur les partis
+   Le RNE est la source officielle pour les mandats des députés, sénateurs, maires et
+   élus européens. Il contient les noms, circonscriptions, dates de mandat, etc. Mais
+   il ne renseigne pas le parti politique ni le groupe parlementaire. C'est une lacune
+   volontaire de la base officielle.
+
+2. nosdeputes.fr ne couvre que les députés en exercice à l'Assemblée nationale
+   Ce site fournit les groupes parlementaires pour les députés actuels. Il ne couvre
+   pas les sénateurs, les maires, ni les élus européens. Les anciens députés peuvent
+   y apparaître avec le statut "ancien_depute", mais leur groupe n'est plus à jour.
+
+3. Le Sénat utilise des sigles opaques (SER, UC, RDSE, GEST...)
+   Les données du Sénat (data.senat.fr) identifient les groupes par des sigles courts
+   qui ne correspondent pas directement à des noms de partis lisibles. Il faut maintenir
+   manuellement une table de correspondance (ex: SER → Parti socialiste, UC → Union
+   Centriste, RDSE → Mouvement radical). Cette table doit être mise à jour à chaque
+   remaniement ou création de groupe.
+
+4. Groupe parlementaire ≠ Parti politique
+   Un élu peut appartenir à un parti (ex: "Horizons") tout en siégeant dans un groupe
+   parlementaire différent (ex: "Ensemble"). Les apparentés, les élus sans étiquette,
+   et les transfuges compliquent encore la correspondance. La distinction est importante
+   pour ne pas induire en erreur.
+
+5. Wikipedia/Wikidata est la source la plus riche mais elle est soumise à un rate limit sévère
+   Wikidata (propriété P102) contient le parti politique de la plupart des élus notables.
+   Mais l'API Wikipedia impose un rate limit (HTTP 429) très rapidement dès qu'on fait
+   plusieurs requêtes en parallèle. Cela rend la source peu fiable pour une application
+   qui interroge de nombreux élus en même temps.
+
+6. Les noms sont une clé d'association fragile
+   Pour croiser les sources (RNE, nosdeputes, Sénat), on doit joindre les données par
+   le nom de l'élu. Cela pose de nombreux problèmes : variantes orthographiques,
+   accents, particules ("de", "le"), prénoms composés, homonymes. Une jointure par
+   nom génère des faux positifs et des faux négatifs.
+
+7. Les anciens élus ne sont dans aucun mapping actif
+   Un ancien ministre ou député qui n'est plus en exercice n'apparaît ni dans les données
+   du Sénat, ni dans nosdeputes (ou avec des données périmées). Si Wikipedia est
+   rate-limité, sa fiche ne contient aucune information sur son parti.
+
+Conclusion
+----------
+Associer de façon fiable un élu à son parti nécessiterait soit une source officielle
+centralisée (qui n'existe pas), soit la maintenance manuelle d'une base de données
+dédiée. Les sources disponibles sont fragmentées, partielles, et soumises à des
+contraintes techniques (rate limits, formats hétérogènes, sigles non documentés).
