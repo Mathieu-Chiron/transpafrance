@@ -50,7 +50,7 @@ async def get_wikipedia_info(name: str) -> dict:
                 "parti":          wikidata.get("parti"),
                 "bord_politique": get_bord_politique(wikidata.get("parti") or summary_data.get("parti")),
                 "naissance":      wikidata.get("naissance"),
-                "source_url":     summary_data.get("content_urls", {}).get("desktop", {}).get("page", SOURCE_URL),
+                "source_url":     summary_data.get("content_urls", {}).get("desktop", {}).get("page") or f"https://fr.wikipedia.org/wiki/{page_title.replace(' ', '_')}",
             }
 
     except Exception as e:

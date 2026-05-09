@@ -96,6 +96,19 @@ async def get_politician(
             type_mandat = "senateur"
             break
 
+    # URLs spécifiques à la personne pour chaque source
+    import unicodedata, re as _re
+    def _slugify(s):
+        s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii")
+        return _re.sub(r"\s+", "-", _re.sub(r"[^a-z0-9\s]", "", s.lower().strip()))
+
+    slug = _slugify(name)
+    url_wikipedia  = wikipedia.get("source_url") or f"https://fr.wikipedia.org/wiki/{name.replace(' ', '_')}"
+    url_nosdeputes = nosdeputes.get("source_url") or f"https://www.nosdeputes.fr/{slug}"
+    url_hatvp      = f"https://www.hatvp.fr/consulter-les-declarations/?s={name.replace(' ', '+')}"
+    url_casier     = casier.get("source_url") or "https://casier-politique.fr"
+    url_an         = nosdeputes.get("url_an")
+
     response = {
         "recherche": name,
         "cache":     False,
@@ -108,7 +121,14 @@ async def get_politician(
                 "photo":          wikipedia.get("photo"),
                 "resume":         wikipedia.get("resume"),
                 "profession":     rne.get("profession"),
-                "source":         wikipedia.get("source_url"),
+                "source":         url_wikipedia,
+            },
+            "liens": {
+                "wikipedia":   url_wikipedia,
+                "nosdeputes":  url_nosdeputes,
+                "assemblee":   url_an,
+                "hatvp":       url_hatvp,
+                "casier":      url_casier,
             },
             "mandats": {
                 "mandats_rne":     mandats_rne,
@@ -118,7 +138,7 @@ async def get_politician(
                 "autres_mandats":  nosdeputes.get("autres_mandats", []),
                 "groupe":          nosdeputes.get("groupe"),
                 "source_rne":      rne.get("source_url"),
-                "source_deputes":  nosdeputes.get("source_url"),
+                "source_deputes":  url_nosdeputes,
             },
             "activite_parlementaire": {
                 "stats_moyennes":   activite.get("stats_moyennes", {}),
@@ -129,7 +149,7 @@ async def get_politician(
                 "amendements":      propositions.get("amendements", []),
                 "note":             activite.get("note"),
                 "source_activite":  activite.get("source_url"),
-                "source_votes":     nosdeputes.get("source_url"),
+                "source_votes":     url_nosdeputes,
                 "source_props":     propositions.get("source_url"),
             },
             "indemnites": {
@@ -137,12 +157,12 @@ async def get_politician(
                 "montants":     activite.get("indemnites", {}),
                 "declarations": hatvp.get("declarations", []),
                 "note":         "Montants légaux fixes — identiques pour tous les parlementaires du même type",
-                "source_hatvp": hatvp.get("source_url"),
+                "source_hatvp": url_hatvp,
             },
             "condamnations": {
                 "trouve":        casier.get("trouve"),
                 "condamnations": casier.get("condamnations", []),
-                "source":        casier.get("source_url"),
+                "source":        url_casier,
             },
             "affaires_et_condamnations_presse": {
                 "articles": news.get("affaires", []),
