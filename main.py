@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -219,7 +220,7 @@ async def get_politicians(
         ressources = RESSOURCES
 
     try:
-        r_cache = redis_lib.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r_cache = redis_lib.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
     except Exception:
         r_cache = None
 
