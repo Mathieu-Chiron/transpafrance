@@ -10,7 +10,7 @@ HEADERS = {
 
 async def get_wikipedia_info(name: str) -> dict:
     try:
-        async with httpx.AsyncClient(timeout=10, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=10, headers=HEADERS, follow_redirects=True) as client:
 
             search_resp = await client.get(
                 "https://fr.wikipedia.org/w/api.php",
@@ -29,16 +29,22 @@ async def get_wikipedia_info(name: str) -> dict:
 
             page_title = results[0]["title"]
 
-            summary_resp = await client.get(
-                f"https://fr.wikipedia.org/api/rest_v1/page/summary/{page_title.replace(' ', '_')}"
-            )
-            summary_data = summary_resp.json()
+            # Fetch summary and wikidata independently so a 429 on summary doesn't block parti
+            summary_data = {}
+            try:
+                summary_resp = await client.get(
+                    f"https://fr.wikipedia.org/api/rest_v1/page/summary/{page_title.replace(' ', '_')}"
+                )
+                if summary_resp.status_code == 200:
+                    summary_data = summary_resp.json()
+            except Exception:
+                pass
 
             wikidata = await _get_wikidata_info(client, page_title)
 
             return {
                 "trouve":         True,
-                "nom":            summary_data.get("title"),
+                "nom":            summary_data.get("title") or page_title,
                 "resume":         summary_data.get("extract"),
                 "photo":          summary_data.get("thumbnail", {}).get("source"),
                 "parti":          wikidata.get("parti"),
