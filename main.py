@@ -136,6 +136,8 @@ async def get_politician(
                 "nombre_mandats":  rne.get("nombre_mandats") or nosdeputes.get("nombre_mandats"),
                 "anciens_mandats": nosdeputes.get("anciens_mandats", []),
                 "autres_mandats":  nosdeputes.get("autres_mandats", []),
+                "mandat_debut":    nosdeputes.get("mandat_debut"),
+                "mandat_fin":      nosdeputes.get("mandat_fin"),
                 "groupe":          nosdeputes.get("groupe"),
                 "source_rne":      rne.get("source_url"),
                 "source_deputes":  url_nosdeputes,
@@ -191,12 +193,22 @@ async def get_politicians(
     page_size:   int  = Query(50),
 ):
     from sources.bord_politique import get_bord_politique
-    import httpx, redis as redis_lib, json as json_mod
+    import httpx, redis as redis_lib, json as json_mod, asyncio as _asyncio
 
     RESSOURCES = {
         "depute":   "1ac42ff4-1336-44f8-a221-832039dbc142",
         "senateur": "b78f8945-509f-4609-a4a7-3048b8370479",
         "maire":    "2876a346-d50c-4911-934e-19ee07b0e503",
+    }
+
+    # Ressources croisées pour détecter le cumul par requête ciblée par nom
+    RESSOURCES_CUMUL = {
+        "senateur":                 "b78f8945-509f-4609-a4a7-3048b8370479",
+        "depute":                   "1ac42ff4-1336-44f8-a221-832039dbc142",
+        "europeen":                 "70957bb0-f19f-40c5-b97b-90b3d4d71f9e",
+        "conseiller_regional":      "430e13f9-834b-4411-a1a8-da0b4b6e715c",
+        "conseiller_departemental": "601ef073-d986-4582-8e1a-ed14dc857fba",
+        "maire":                    "2876a346-d50c-4911-934e-19ee07b0e503",
     }
 
     BASE_URL = "https://tabular-api.data.gouv.fr/api/resources/{}/data/"
@@ -211,62 +223,120 @@ async def get_politicians(
     except Exception:
         r_cache = None
 
+    _sem = _asyncio.Semaphore(20)  # max 20 requêtes simultanées
+
+    async def _check_cumul(client, nom_famille: str, prenom: str, type_principal: str) -> list:
+        cache_key = f"politico:cumul_check:{nom_famille.lower()}:{prenom.lower()}"
+        if r_cache:
+            try:
+                cached = r_cache.get(cache_key)
+                if cached is not None:
+                    return json_mod.loads(cached)
+            except Exception:
+                pass
+
+        autres = {k: v for k, v in RESSOURCES_CUMUL.items() if k != type_principal}
+
+        async def _search(label, rid):
+            async with _sem:
+                try:
+                    resp = await client.get(
+                        BASE_URL.format(rid),
+                        params={"Nom de l'élu__exact": nom_famille, "page_size": 5},
+                    )
+                    if resp.status_code != 200:
+                        return None
+                    rows = resp.json().get("data", [])
+                    for row in rows:
+                        if (row.get("Prénom de l'élu") or "").strip().lower() == prenom.strip().lower():
+                            return label
+                except Exception:
+                    pass
+                return None
+
+        results = await _asyncio.gather(*[_search(label, rid) for label, rid in autres.items()])
+        types_trouves = [type_principal] + [r for r in results if r]
+
+        if r_cache:
+            try:
+                r_cache.setex(cache_key, 86400, json_mod.dumps(types_trouves))
+            except Exception:
+                pass
+        return types_trouves
+
     elus = []
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        for label, rid in ressources.items():
-            try:
-                resp = await client.get(
-                    BASE_URL.format(rid),
-                    params={"page_size": page_size, "page": page}
-                )
-                if resp.status_code != 200:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # Récupération de la page principale
+            page_resps = await _asyncio.gather(*[
+                client.get(BASE_URL.format(rid), params={"page_size": page_size, "page": page})
+                for rid in ressources.values()
+            ])
+
+            # Construction de la liste d'élus à partir des réponses
+            elus_raw = []
+            for (label, rid), resp in zip(ressources.items(), page_resps):
+                try:
+                    if resp.status_code != 200:
+                        continue
+                    rows = resp.json().get("data", [])
+                    for row in rows:
+                        prenom      = row.get("Prénom de l'élu", "") or ""
+                        nom_famille = row.get("Nom de l'élu", "") or ""
+                        naiss       = row.get("Date de naissance", "") or ""
+                        nom_complet = (prenom + " " + nom_famille).strip()
+                        parti_elu   = row.get("Libellé du groupe politique", "") or ""
+                        bord_elu    = get_bord_politique(parti_elu)
+
+                        if parti and parti.lower() not in parti_elu.lower():
+                            continue
+                        if bord and bord_elu and bord.lower() not in bord_elu.lower():
+                            continue
+
+                        nb_condamnations = 0
+                        condamne         = False
+                        if r_cache:
+                            try:
+                                ck     = f"politico:condamnations:{nom_complet.lower().replace(' ', '_')}"
+                                cached = r_cache.get(ck)
+                                if cached:
+                                    cond_data        = json_mod.loads(cached)
+                                    nb_condamnations = cond_data.get("nb", 0)
+                                    condamne         = nb_condamnations > 0
+                            except Exception:
+                                pass
+
+                        elus_raw.append({
+                            "nom":              nom_complet,
+                            "prenom":           prenom.strip(),
+                            "nom_famille":      nom_famille.strip(),
+                            "type_mandat":      label,
+                            "departement":      row.get("Libellé du département"),
+                            "parti":            parti_elu,
+                            "bord":             bord_elu,
+                            "debut_mandat":     row.get("Date de début du mandat"),
+                            "naissance":        naiss,
+                            "nb_condamnations": nb_condamnations,
+                            "condamne":         condamne,
+                        })
+                except Exception as e:
+                    print(f"[POLITICIANS] Erreur {label}: {e}")
                     continue
 
-                rows = resp.json().get("data", [])
+            # Vérification cumul en parallèle pour tous les élus de la page
+            cumul_results = await _asyncio.gather(*[
+                _check_cumul(client, e["nom_famille"], e["prenom"], e["type_mandat"])
+                for e in elus_raw
+            ])
 
-                for row in rows:
-                    prenom      = row.get("Prénom de l'élu", "") or ""
-                    nom_famille = row.get("Nom de l'élu", "") or ""
-                    nom_complet = (prenom + " " + nom_famille).strip()
-                    parti_elu   = row.get("Libellé du groupe politique", "") or ""
-                    bord_elu    = get_bord_politique(parti_elu)
+            for elu, types in zip(elus_raw, cumul_results):
+                elu["cumul_mandats"] = len(types) > 1
+                elu["types_mandats"] = types
+                elus.append(elu)
 
-                    if parti and parti.lower() not in parti_elu.lower():
-                        continue
-                    if bord and bord_elu and bord.lower() not in bord_elu.lower():
-                        continue
-
-                    nb_condamnations = 0
-                    condamne         = False
-                    if r_cache:
-                        try:
-                            cache_key = f"politico:condamnations:{nom_complet.lower().replace(' ', '_')}"
-                            cached    = r_cache.get(cache_key)
-                            if cached:
-                                cond_data        = json_mod.loads(cached)
-                                nb_condamnations = cond_data.get("nb", 0)
-                                condamne         = nb_condamnations > 0
-                        except Exception:
-                            pass
-
-                    elus.append({
-                        "nom":              nom_complet,
-                        "prenom":           prenom,
-                        "nom_famille":      nom_famille,
-                        "type_mandat":      label,
-                        "departement":      row.get("Libellé du département"),
-                        "parti":            parti_elu,
-                        "bord":             bord_elu,
-                        "debut_mandat":     row.get("Date de début du mandat"),
-                        "naissance":        row.get("Date de naissance"),
-                        "nb_condamnations": nb_condamnations,
-                        "condamne":         condamne,
-                    })
-
-            except Exception as e:
-                print(f"[POLITICIANS] Erreur {label}: {e}")
-                continue
+    except Exception as e:
+        print(f"[POLITICIANS] Erreur: {e}")
 
     return {
         "total": len(elus),
