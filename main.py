@@ -105,7 +105,7 @@ async def get_politician(
     slug = _slugify(name)
     url_wikipedia  = wikipedia.get("source_url") or f"https://fr.wikipedia.org/wiki/{name.replace(' ', '_')}"
     url_nosdeputes = nosdeputes.get("source_url") or f"https://www.nosdeputes.fr/{slug}"
-    url_hatvp      = f"https://www.hatvp.fr/consulter-les-declarations/?s={name.replace(' ', '+')}"
+    url_hatvp      = hatvp.get("source_url") or f"https://www.hatvp.fr/consulter-les-declarations/?s={name.replace(' ', '+')}"
     url_casier     = casier.get("source_url") or "https://casier-politique.fr"
     url_an         = nosdeputes.get("url_an")
 
