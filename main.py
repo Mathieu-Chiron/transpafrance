@@ -344,3 +344,16 @@ async def get_politicians(
         "page":  page,
         "elus":  elus,
     }
+
+
+@app.get("/elus/code-postal/{code_postal}")
+@limiter.limit("30/minute")
+async def get_elus_par_code_postal(
+    request:      Request,
+    code_postal:  str,
+):
+    """Trouve tous les élus (député, sénateur, maire) d'un code postal."""
+    from sources.circonscription import get_elus_par_code_postal
+    if not code_postal.isdigit() or len(code_postal) != 5:
+        raise HTTPException(status_code=400, detail="Code postal invalide — format attendu : 75001")
+    return await get_elus_par_code_postal(code_postal)
