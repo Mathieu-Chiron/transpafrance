@@ -14,6 +14,7 @@ from sources.casier import get_casier_politique_info
 from sources.propositions import get_propositions_info
 from sources.rne import get_rne_info
 from sources.activite import get_activite_info
+from sources.score import calculer_score
 from sources.bord_politique import get_bord_politique
 from cache import get_cache, set_cache, cache_stats
 
@@ -178,6 +179,14 @@ async def get_politician(
             },
         }
     }
+
+    score = calculer_score(
+        stats_moyennes = activite.get("stats_moyennes", {}),
+        condamnations  = casier.get("condamnations", []),
+        mandats_rne    = rne.get("mandats", []),
+        hatvp_url      = hatvp.get("source_url", ""),
+    )
+    response["resultats"]["score"] = score
 
     set_cache(name, response, "politician")
     return response
