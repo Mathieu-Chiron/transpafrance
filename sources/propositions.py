@@ -25,8 +25,8 @@ def _strip_html(text: str) -> str:
     text = html.unescape(text)
     return text.strip()
 
-async def _fetch_all_results(client, name: str, object_name: str) -> list:
-    """Pagine l'API nosdeputes jusqu'à épuisement des résultats."""
+async def _fetch_all_results(client, name: str, object_name: str, max_results: int = None) -> list:
+    """Pagine l'API nosdeputes jusqu'à épuisement ou max_results atteint."""
     all_results = []
     page = 1
     while True:
@@ -42,7 +42,9 @@ async def _fetch_all_results(client, name: str, object_name: str) -> list:
             if not results:
                 break
             all_results.extend(results)
-            # nosdeputes retourne 10 résultats par page
+            if max_results and len(all_results) >= max_results:
+                all_results = all_results[:max_results]
+                break
             if len(results) < 10:
                 break
             page += 1
@@ -101,9 +103,10 @@ async def get_propositions_info(name: str) -> dict:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=HEADERS) as client:
 
             # Récupération de toutes les pages en parallèle
+            # Amendements limités à 50 les plus récents (trop volumineux sinon)
             props_results, amend_results = await asyncio.gather(
                 _fetch_all_results(client, name, "Texteloi"),
-                _fetch_all_results(client, name, "Amendement"),
+                _fetch_all_results(client, name, "Amendement", max_results=50),
             )
 
             # Détails propositions en parallèle
