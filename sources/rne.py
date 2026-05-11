@@ -14,19 +14,19 @@ RESSOURCES = {
 
 BASE_URL = "https://tabular-api.data.gouv.fr/api/resources/{}/data/"
 
-def _extraire_nom(name: str) -> str:
-    """Extrait le nom de famille en majuscules : 'Gerard Larcher' -> 'LARCHER'"""
+def _extraire_prenom_nom(name: str) -> tuple:
+    """Retourne (prenom, nom) : 'Jerome Buisson' -> ('Jerome', 'BUISSON')"""
     parts = name.strip().split(" ")
     if len(parts) >= 2:
-        return " ".join(parts[1:]).upper()
-    return name.upper()
+        return parts[0], " ".join(parts[1:]).upper()
+    return "", name.upper()
 
-async def _chercher(client, label: str, ressource_id: str, nom: str) -> list:
+async def _chercher(client, label: str, ressource_id: str, prenom: str, nom: str) -> list:
     try:
-        resp = await client.get(
-            BASE_URL.format(ressource_id),
-            params={"Nom de l'élu__exact": nom}
-        )
+        params = {"Nom de l'élu__exact": nom}
+        if prenom:
+            params["Prénom de l'élu__exact"] = prenom
+        resp = await client.get(BASE_URL.format(ressource_id), params=params)
         if resp.status_code != 200:
             return []
         rows = resp.json().get("data", [])
@@ -35,12 +35,12 @@ async def _chercher(client, label: str, ressource_id: str, nom: str) -> list:
         return []
 
 async def get_rne_info(name: str) -> dict:
-    nom = _extraire_nom(name)
+    prenom, nom = _extraire_prenom_nom(name)
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resultats = await asyncio.gather(*[
-                _chercher(client, label, rid, nom)
+                _chercher(client, label, rid, prenom, nom)
                 for label, rid in RESSOURCES.items()
             ])
 
