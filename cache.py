@@ -7,10 +7,10 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 TTL = {
-    "politician":    60 * 60 * 24,
-    "condamnations": 60 * 60 * 6,
-    "votes":         60 * 60 * 12,
-    "propositions":  60 * 60 * 12,
+    "politician":    60 * 60 * 24 * 7,  # 7 jours — précalcul bimensuel
+    "condamnations": 60 * 60 * 24 * 7,
+    "votes":         60 * 60 * 24,
+    "propositions":  60 * 60 * 24,
     "news":          60 * 60 * 2,
 }
 
