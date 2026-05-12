@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 import asyncio
 
 from sources.wikipedia import get_wikipedia_info
-from sources.nosdeputes import get_nosdeputes_info
+from sources.nosdeputes import get_nosdeputes_info, get_votes_historique
 from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
@@ -39,6 +39,33 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"message": "TranspaFrance API — utilisez /politician?name=Prénom+Nom"}
+
+@app.get("/politician/votes")
+@limiter.limit("30/minute")
+async def get_politician_votes(
+    request:   Request,
+    name:      str = Query(..., description="Nom complet du député"),
+    q:         str = Query("",  description="Mot-clé (ex: retraites, immigration)"),
+    position:  str = Query("",  description="pour / contre / abstention"),
+    page:      int = Query(1),
+    page_size: int = Query(50),
+):
+    if not name or len(name.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Nom invalide")
+
+    cache_key = f"{name.strip()}:votes:{q}:{position}:{page}:{page_size}"
+    cached = get_cache(cache_key, "votes")
+    if cached:
+        return cached
+
+    result = await get_votes_historique(
+        name=name.strip(), query=q, position=position,
+        page=page, page_size=page_size,
+    )
+    if result.get("trouve"):
+        set_cache(cache_key, result, "votes")
+    return result
+
 
 @app.get("/cache/stats")
 @limiter.limit("10/minute")

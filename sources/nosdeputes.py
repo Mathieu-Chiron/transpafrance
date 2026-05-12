@@ -72,20 +72,20 @@ async def get_nosdeputes_info(name: str) -> dict:
             else:
                 groupe_nom = None
 
-            # Votes récents
+            # Votes récents (20 derniers pour l'aperçu)
             votes_resp = await client.get(f"{SOURCE_URL}/{slug}/votes/json")
             votes = []
             if votes_resp.status_code == 200:
-                for v in _to_list(votes_resp.json().get("votes"))[:10]:
+                for v in _to_list(votes_resp.json().get("votes"))[:20]:
                     vote    = v.get("vote", {})
                     scrutin = vote.get("scrutin", {})
                     votes.append({
-                        "texte":          scrutin.get("titre"),
-                        "position":       vote.get("position"),
+                        "texte":           scrutin.get("titre"),
+                        "position":        vote.get("position"),
                         "position_groupe": vote.get("position_groupe"),
-                        "date":           scrutin.get("date"),
-                        "sort":           scrutin.get("sort"),
-                        "url":            scrutin.get("url_nosdeputes"),
+                        "date":            scrutin.get("date"),
+                        "sort":            scrutin.get("sort"),
+                        "url":             scrutin.get("url_nosdeputes"),
                     })
 
             stats = fiche.get("statistiques") or {}
@@ -113,3 +113,75 @@ async def get_nosdeputes_info(name: str) -> dict:
 
     except Exception as e:
         return {"trouve": False, "erreur": str(e), "source_url": SOURCE_URL}
+
+
+def _parse_vote(v: dict) -> dict:
+    vote    = v.get("vote", {})
+    scrutin = vote.get("scrutin", {})
+    return {
+        "texte":           scrutin.get("titre"),
+        "position":        vote.get("position"),
+        "position_groupe": vote.get("position_groupe"),
+        "date":            scrutin.get("date"),
+        "sort":            scrutin.get("sort"),
+        "url":             scrutin.get("url_nosdeputes"),
+        "numero":          scrutin.get("numero"),
+        "type":            scrutin.get("type"),
+    }
+
+
+async def get_votes_historique(
+    name:      str,
+    query:     str  = "",
+    position:  str  = "",
+    page:      int  = 1,
+    page_size: int  = 50,
+) -> dict:
+    """Retourne l'historique complet des votes d'un député avec filtre et pagination."""
+    slug = _slugify(name)
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=HEADERS) as client:
+            resp = await client.get(f"{SOURCE_URL}/{slug}/votes/json")
+            if resp.status_code != 200:
+                return {
+                    "trouve": False,
+                    "votes": [], "total": 0, "page": page, "page_size": page_size,
+                    "legislature": "16e (2022–2024)",
+                    "note": "Données non disponibles pour cet élu sur NosDéputés.fr",
+                    "source_url": f"{SOURCE_URL}/{slug}",
+                }
+
+            tous = [_parse_vote(v) for v in _to_list(resp.json().get("votes"))]
+            tous = [v for v in tous if v["texte"]]  # filtre les votes sans titre
+
+            # Filtre mot-clé
+            if query:
+                q = query.lower()
+                tous = [v for v in tous if q in (v["texte"] or "").lower()]
+
+            # Filtre position (pour, contre, abstention)
+            if position:
+                tous = [v for v in tous if (v["position"] or "").lower() == position.lower()]
+
+            total   = len(tous)
+            debut   = (page - 1) * page_size
+            page_votes = tous[debut: debut + page_size]
+
+            return {
+                "trouve":      True,
+                "votes":       page_votes,
+                "total":       total,
+                "page":        page,
+                "page_size":   page_size,
+                "pages":       (total + page_size - 1) // page_size if total else 0,
+                "legislature": "16e (2022–2024)",
+                "note":        "17e législature (depuis juillet 2024) : données en attente de mise à jour par NosDéputés.fr",
+                "source_url":  f"{SOURCE_URL}/{slug}/votes",
+            }
+
+    except Exception as e:
+        return {
+            "trouve": False, "erreur": str(e),
+            "votes": [], "total": 0, "page": page, "page_size": page_size,
+            "source_url": SOURCE_URL,
+        }
