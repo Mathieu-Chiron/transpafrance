@@ -40,6 +40,43 @@ app.add_middleware(
 def root():
     return {"message": "TranspaFrance API — utilisez /politician?name=Prénom+Nom"}
 
+@app.get("/stats")
+@limiter.limit("30/minute")
+async def get_stats(request: Request):
+    import redis as _redis, json as _json, os as _os
+    try:
+        r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+        keys = r.keys("politico:condamnations:*")
+        elus_avec_affaires = 0
+        total_procedures   = 0
+        for key in keys:
+            try:
+                val = r.get(key)
+                if val:
+                    data = _json.loads(val)
+                    nb   = data.get("nb", 0)
+                    if nb > 0:
+                        elus_avec_affaires += 1
+                        total_procedures   += nb
+            except Exception:
+                continue
+        return {
+            "deputes":             577,
+            "senateurs":           348,
+            "elus_avec_affaires":  elus_avec_affaires,
+            "total_procedures":    total_procedures,
+            "donnees_publiques":   "100%",
+        }
+    except Exception as e:
+        return {
+            "deputes":            577,
+            "senateurs":          348,
+            "elus_avec_affaires": None,
+            "total_procedures":   None,
+            "donnees_publiques":  "100%",
+            "erreur":             str(e),
+        }
+
 @app.get("/politician/votes")
 @limiter.limit("30/minute")
 async def get_politician_votes(
