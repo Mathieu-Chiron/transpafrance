@@ -60,6 +60,33 @@ async def get_elus_par_code_postal(code_postal: str) -> dict:
         return {"trouve": False, "erreur": str(e)}
 
 
+async def get_elus_par_departement(dept_code: str) -> dict:
+    """Recherche directe par numéro de département (ex: '69', '75')."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            results = await asyncio.gather(
+                _chercher_par_dept(client, RNE_DEPUTES,   dept_code, "Député"),
+                _chercher_par_dept(client, RNE_SENATEURS, dept_code, "Sénateur"),
+            )
+            deputes, senateurs = results
+            dept_nom = deputes[0].get("departement") if deputes else (senateurs[0].get("departement") if senateurs else dept_code)
+            return {
+                "trouve":      True,
+                "code_postal": dept_code,
+                "commune":     None,
+                "departement": dept_code,
+                "departement_nom": dept_nom,
+                "deputes":     deputes,
+                "senateurs":   senateurs,
+                "maires":      [],
+                "total":       len(deputes) + len(senateurs),
+                "note":        f"Recherche par département {dept_code} — entrez un code postal complet pour voir les maires",
+                "source_url":  SOURCE_RNE,
+            }
+    except Exception as e:
+        return {"trouve": False, "erreur": str(e)}
+
+
 async def _chercher_par_dept(client, ressource_id: str, dept_code: str, label: str) -> list:
     try:
         resp = await client.get(
