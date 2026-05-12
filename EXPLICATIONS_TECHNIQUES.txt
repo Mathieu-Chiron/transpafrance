@@ -1,0 +1,1038 @@
+================================================================================
+TRANSPAFRANCE — GUIDE TECHNIQUE POUR NON-CODEURS
+Explication des 30 concepts clés qui ont permis de construire cette application
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. FRONTEND VS BACKEND — POURQUOI SÉPARER LES DEUX
+────────────────────────────────────────────────────────────────────────────────
+
+Quand vous utilisez une application web, il se passe en réalité deux choses très
+distinctes, dans deux endroits différents, qui communiquent ensemble.
+
+Le FRONTEND, c'est tout ce que vous voyez et touchez. C'est la page web dans
+votre navigateur : les boutons, les couleurs, les textes, les onglets, les
+animations. Le frontend s'exécute directement sur votre ordinateur, dans votre
+navigateur (Chrome, Safari, Firefox). Il ne fait aucun calcul compliqué — son
+seul rôle est d'afficher de l'information de façon agréable et de réagir à vos
+clics.
+
+Le BACKEND, c'est tout ce qui se passe "dans les coulisses", sur un serveur
+distant. C'est lui qui va chercher les données, les assemble, les calcule, et
+les renvoie au frontend. Vous ne le voyez jamais directement. C'est une machine
+quelque part dans le monde qui tourne 24h/24.
+
+Pourquoi les séparer ? Pour plusieurs raisons pratiques :
+
+1. La sécurité : certaines opérations (aller chercher des données sensibles,
+   interroger des bases de données) ne doivent pas s'exécuter directement dans
+   le navigateur de l'utilisateur, car n'importe qui pourrait voir le code et
+   l'exploiter.
+
+2. La performance : le backend peut faire des calculs lourds sur une machine
+   puissante, puis envoyer un résultat léger au frontend.
+
+3. La réutilisabilité : un même backend peut servir à la fois un site web, une
+   application mobile, et un autre service — tous parlent au même "cerveau".
+
+Dans TranspaFrance, le frontend est le site que vous voyez sur
+transpafrance-front.vercel.app. Le backend est l'API qui tourne sur Railway.
+Le frontend pose des questions au backend ("donne-moi les infos sur Jean Dupont"),
+le backend travaille et répond, le frontend affiche le résultat.
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. VERCEL — À QUOI ÇA SERT, COMMENT ÇA MARCHE
+────────────────────────────────────────────────────────────────────────────────
+
+Vercel est une plateforme spécialisée dans l'hébergement de frontends. Concrète-
+ment, c'est le service qui met notre site web sur internet, gratuitement, et le
+rend accessible à n'importe qui dans le monde.
+
+Imaginez Vercel comme un imprimeur ultra-rapide. Vous lui donnez votre manuscrit
+(le code du site), il l'imprime en millions d'exemplaires et les distribue dans
+des entrepôts partout dans le monde. Quand quelqu'un au Japon ouvre votre site,
+il reçoit l'exemplaire depuis l'entrepôt le plus proche — et c'est instantané.
+
+Techniquement, Vercel utilise ce qu'on appelle un CDN (Content Delivery Network),
+c'est-à-dire un réseau mondial de serveurs. Votre site est copié sur des dizaines
+de serveurs répartis sur tous les continents. Résultat : peu importe où se trouve
+l'utilisateur, le site se charge très rapidement.
+
+Ce qui rend Vercel particulièrement pratique, c'est son intégration avec GitHub.
+Le principe est simple : dès qu'on pousse du nouveau code sur GitHub (la branche
+principale "main"), Vercel le détecte automatiquement, recompile le site, et le
+redéploie en quelques minutes — sans aucune action manuelle. C'est ce qu'on
+appelle le déploiement continu.
+
+Vercel est gratuit pour les projets personnels ou de petite taille. Il gère
+aussi automatiquement les certificats de sécurité HTTPS (le cadenas vert dans
+votre navigateur), les noms de domaine, et la compression des fichiers pour que
+le site soit le plus léger possible.
+
+Pour TranspaFrance, Vercel héberge tout le code React (le frontend), c'est-à-dire
+tout ce que vous voyez : la barre de recherche, les fiches des élus, l'onglet
+Score, l'onglet Indemnités, etc.
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. RAILWAY — À QUOI ÇA SERT, COMMENT ÇA MARCHE
+────────────────────────────────────────────────────────────────────────────────
+
+Railway est l'équivalent de Vercel, mais pour le backend. C'est la plateforme
+qui héberge notre API Python et la fait tourner en permanence sur internet.
+
+La différence fondamentale avec Vercel, c'est que le backend doit "tourner en
+permanence". Contrairement à un site statique (qui n'est que des fichiers HTML,
+CSS et JavaScript que l'on envoie tels quels), notre backend est un programme
+qui s'exécute en continu, attend des requêtes, fait des calculs, interroge des
+sources externes, et répond. C'est donc un vrai serveur, pas juste des fichiers.
+
+Railway fonctionne comme un gestionnaire d'appartements pour programmes. Vous
+lui dites : "voici mon programme, fais-le tourner sur un de tes serveurs". Railway
+lui alloue de la mémoire, du processeur, et une adresse internet accessible. Il
+surveille aussi que le programme ne plante pas, et le redémarre automatiquement
+si c'est le cas.
+
+Comme Vercel, Railway est connecté à GitHub. Dès qu'on modifie le code du backend
+et qu'on le pousse sur la branche "main", Railway détecte la modification, arrête
+l'ancienne version, installe les nouvelles dépendances, et relance le programme
+mis à jour. Tout cela prend environ 2 à 3 minutes.
+
+Railway offre aussi des services complémentaires très utiles : on y a connecté
+une base Redis (le cache dont on parlera plus loin), qui tourne elle aussi sur
+Railway dans un conteneur séparé. Les deux services (l'API et Redis) sont dans
+le même "projet" Railway et peuvent se parler directement via le réseau interne,
+ce qui est plus rapide et plus sécurisé que de passer par internet.
+
+Pour TranspaFrance, Railway héberge l'API FastAPI qui reçoit vos recherches,
+interroge Wikipedia, le RNE, NosDéputés, etc., calcule le score, et vous renvoie
+toutes les données.
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. GITHUB — LE LIEN ENTRE LE CODE ET LE DÉPLOIEMENT AUTOMATIQUE
+────────────────────────────────────────────────────────────────────────────────
+
+GitHub est souvent décrit comme "le Google Drive des développeurs", mais c'est
+en réalité bien plus que ça. C'est un outil de gestion de versions du code,
+doublé d'une plateforme collaborative, et d'un déclencheur pour les déploiements
+automatiques.
+
+La gestion de versions, c'est quoi ? Imaginez que vous travaillez sur un document
+Word important. Vous en sauvegardez une copie chaque jour : "document_v1",
+"document_v2", etc. Git (le système sous-jacent à GitHub) fait exactement ça,
+mais de façon beaucoup plus intelligente. Il enregistre chaque modification avec
+une description, une date, et l'auteur. Vous pouvez à tout moment revenir à une
+version précédente, comparer deux versions, ou travailler en parallèle sur deux
+versions différentes (ce qu'on appelle des "branches").
+
+Les branches sont une notion clé. Quand on veut développer une nouvelle
+fonctionnalité sans risquer de casser ce qui fonctionne déjà, on crée une
+branche séparée. On y fait toutes les modifications, on teste, et quand tout
+est prêt, on "fusionne" (merge) la branche dans la version principale. Dans
+TranspaFrance, on a eu des branches comme "scoring-de-confiance",
+"indemnites-visibles", "recherche-elu-code-postal", etc.
+
+Le lien avec Vercel et Railway est automatique : ces deux plateformes "écoutent"
+GitHub. Dès qu'une modification arrive sur la branche "main", elles déclenchent
+automatiquement un nouveau déploiement. Résultat : on modifie le code sur son
+ordinateur, on envoie sur GitHub, et quelques minutes plus tard le site en
+production est mis à jour. Aucune manipulation manuelle requise.
+
+GitHub sert aussi de sauvegarde : si l'ordinateur du développeur tombe en panne,
+tout le code est sauvegardé sur les serveurs de GitHub.
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. NOM DE DOMAINE & URL
+────────────────────────────────────────────────────────────────────────────────
+
+Une URL (Uniform Resource Locator) est simplement une adresse sur internet.
+Comme une adresse postale permet de trouver un appartement dans une ville, une
+URL permet de trouver une ressource précise sur internet.
+
+L'URL "https://transpafrance-front.vercel.app" se décompose ainsi :
+- "https" : le protocole de communication sécurisé (le cadenas)
+- "transpafrance-front" : le nom du projet sur Vercel
+- "vercel.app" : le domaine fourni par Vercel gratuitement
+
+Un nom de domaine personnalisé (comme "transpafrance.fr") peut être acheté auprès
+d'un registrar (OVH, Gandi, etc.) pour quelques euros par an, puis configuré
+pour pointer vers le serveur Vercel.
+
+Dans notre API, les URLs prennent une forme particulière :
+"https://web-production-6c245.up.railway.app/politician?name=Jean+Dupont"
+
+Ici, "/politician" est ce qu'on appelle un "endpoint" (point d'entrée de l'API),
+et "?name=Jean+Dupont" est un paramètre qu'on passe à l'API pour lui dire qui
+on cherche. C'est exactement comme remplir un formulaire de recherche, mais
+via une URL.
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. C'EST QUOI UNE API — LA MÉTAPHORE DU SERVEUR DE RESTAURANT
+────────────────────────────────────────────────────────────────────────────────
+
+API signifie "Application Programming Interface", ce qui ne veut pas dire
+grand-chose pour un non-développeur. Voici la métaphore la plus parlante :
+
+Imaginez un restaurant. Vous êtes assis à table (vous êtes le frontend). En
+cuisine, les chefs préparent les plats (c'est le backend, les données). Entre
+les deux, il y a le serveur : c'est l'API. Vous ne pouvez pas aller directement
+en cuisine — ce n'est pas votre rôle. Mais vous pouvez passer commande au
+serveur, qui transmet à la cuisine, attend que le plat soit prêt, et vous
+l'apporte.
+
+L'API définit un "menu" précis : elle dit exactement ce qu'on peut demander,
+sous quelle forme, et ce qu'on obtiendra en retour. Dans TranspaFrance, notre
+"menu" contient par exemple :
+
+- "Donne-moi les informations sur la personnalité X"
+  → /politician?name=Jean+Dupont
+
+- "Donne-moi la liste de tous les élus"
+  → /politicians
+
+- "Donne-moi les élus de ce code postal"
+  → /elus/code-postal/75001
+
+L'API répond toujours dans un format structuré appelé JSON (JavaScript Object
+Notation). C'est un format texte lisible par les machines, qui ressemble à des
+étiquettes et des valeurs organisées en arborescence. Par exemple :
+{ "nom": "Jean Dupont", "parti": "Renaissance", "score": 72 }
+
+Ce format standardisé permet au frontend (React) de recevoir la réponse et de
+savoir exactement où trouver chaque information pour l'afficher.
+
+Une API bien conçue est précieuse car elle peut être réutilisée par n'importe
+quel autre service : une application mobile, un bot, un site tiers, un chercheur
+qui veut exploiter les données — tous peuvent parler au même backend.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. POURQUOI PYTHON — LES ALTERNATIVES ET POURQUOI ON L'A CHOISI
+────────────────────────────────────────────────────────────────────────────────
+
+Python est un langage de programmation créé en 1991, réputé pour sa lisibilité
+et sa simplicité. Son code ressemble presque à de l'anglais structuré, ce qui
+le rend plus accessible que d'autres langages.
+
+Pour construire un backend d'API, plusieurs langages existent : JavaScript
+(Node.js), Java, Go, Ruby, PHP, Rust... Chacun a ses avantages. Voici pourquoi
+Python a été choisi pour TranspaFrance :
+
+1. L'écosystème data et web scraping : Python dispose des meilleures bibliothèques
+   pour récupérer et traiter des données web. Des outils comme httpx (pour faire
+   des requêtes HTTP), Playwright (pour simuler un navigateur), ou BeautifulSoup
+   (pour analyser du HTML) sont extrêmement matures et bien documentés en Python.
+
+2. La rapidité de développement : Python permet d'écrire moins de code pour faire
+   la même chose. Un prototype fonctionnel se construit en quelques heures.
+
+3. FastAPI : ce framework Python moderne permet de créer des APIs très performantes
+   avec très peu de code. Il gère automatiquement la documentation, la validation
+   des paramètres, et la gestion des erreurs.
+
+4. La gestion des tâches parallèles (asyncio) : Python moderne supporte
+   l'exécution simultanée de plusieurs tâches réseau, ce qui est crucial pour
+   notre application qui doit interroger 8 sources en même temps.
+
+5. La communauté : Python est l'un des langages les plus utilisés au monde.
+   Pour chaque problème qu'on rencontre, des dizaines de solutions existent déjà
+   en ligne.
+
+En résumé : Python est le choix naturel pour une application qui doit beaucoup
+"parler" à des services externes, traiter des données textuelles, et être
+développée rapidement par une petite équipe.
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. FASTAPI — LE FRAMEWORK QUI CRÉE L'API
+────────────────────────────────────────────────────────────────────────────────
+
+Un framework, c'est un ensemble d'outils préfabriqués qui évite de "réinventer
+la roue". Imaginez construire une maison : vous pourriez fabriquer vos propres
+briques, couler votre propre béton, et forger vos propres clous. Ou vous pouvez
+aller chez un fournisseur qui vous vend tout ça prêt à l'emploi. Un framework,
+c'est ce fournisseur.
+
+FastAPI est un framework Python spécialisé dans la création d'APIs web. Il a été
+créé en 2018 et est rapidement devenu l'un des plus populaires grâce à ses trois
+qualités principales :
+
+1. La rapidité d'exécution : FastAPI est l'un des frameworks Python les plus
+   performants, comparable en vitesse à des solutions en Go ou Node.js.
+
+2. La simplicité d'écriture : pour créer un endpoint, on écrit simplement une
+   fonction Python avec une décoration ("@app.get(...)"), et FastAPI fait le
+   reste. Pas besoin de configurer manuellement comment recevoir les requêtes,
+   comment parser les paramètres, comment formater la réponse.
+
+3. La documentation automatique : FastAPI génère automatiquement une page de
+   documentation interactive (disponible à l'adresse /docs de notre API) qui
+   liste tous les endpoints disponibles et permet de les tester directement
+   depuis un navigateur.
+
+Dans TranspaFrance, c'est FastAPI qui reçoit votre recherche "Jean Dupont",
+qui déclenche les 8 appels vers les sources externes, qui assemble le résultat,
+et qui vous renvoie le JSON final. Il gère aussi le rate limiting (limitation du
+nombre de requêtes), les erreurs HTTP, et les en-têtes CORS (qui permettent au
+frontend sur Vercel de parler au backend sur Railway malgré des domaines
+différents).
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. LES ENDPOINTS — CE QUE L'API EXPOSE
+────────────────────────────────────────────────────────────────────────────────
+
+Un endpoint est une "porte d'entrée" spécifique de l'API. Chaque endpoint
+correspond à une action précise que l'API sait faire. C'est comme les différents
+guichets d'une administration : guichet 1 pour les permis de conduire, guichet 2
+pour les cartes d'identité, etc.
+
+Dans TranspaFrance, les endpoints principaux sont :
+
+GET /politician?name=Jean+Dupont
+→ Renvoie toutes les informations sur une personnalité : identité, mandats,
+  activité parlementaire, condamnations, score de transparence, indemnités.
+
+GET /politicians?type_mandat=depute&parti=RN
+→ Renvoie la liste des élus avec des filtres possibles (type, parti, bord).
+
+GET /elus/code-postal/75001
+→ Renvoie tous les élus (député, sénateur, maire) d'un code postal donné.
+
+GET /cache/stats
+→ Renvoie des statistiques sur le cache Redis (nombre de fiches en cache).
+
+GET /admin/precalcul?secret=xxx
+→ Déclenche le précalcul de toutes les fiches en arrière-plan.
+
+Le mot "GET" désigne le type de requête HTTP — une simple lecture, sans
+modification de données. Il existe d'autres types (POST pour créer, PUT pour
+modifier, DELETE pour supprimer), mais TranspaFrance n'utilise que GET car elle
+lit des données sans jamais en écrire.
+
+Chaque endpoint peut accepter des paramètres (dans l'URL après le "?") qui
+permettent de préciser la demande, filtrer les résultats, ou modifier le
+comportement (comme "refresh=true" pour ignorer le cache).
+
+
+────────────────────────────────────────────────────────────────────────────────
+10. LES PARAMÈTRES DE REQUÊTE — ?name=Jean+Dupont
+────────────────────────────────────────────────────────────────────────────────
+
+Les paramètres de requête sont les informations qu'on passe à l'API directement
+dans l'URL, après le point d'interrogation "?". C'est exactement comme remplir
+un formulaire de recherche sur Google.
+
+Quand vous tapez dans Google "temps Paris demain", Google reçoit en réalité une
+URL qui ressemble à : google.com/search?q=temps+Paris+demain
+Le "q=" est le paramètre, et "temps+Paris+demain" est sa valeur (les espaces sont
+remplacés par des "+" dans les URLs).
+
+Dans TranspaFrance, les principaux paramètres sont :
+
+- name : le nom de la personnalité recherchée
+  /politician?name=Marine+Le+Pen
+
+- refresh : booléen (vrai/faux) pour forcer le rechargement depuis les sources
+  /politician?name=Marine+Le+Pen&refresh=true
+
+- type_mandat : filtrer la liste par type d'élu
+  /politicians?type_mandat=senateur
+
+- parti : filtrer par parti politique
+  /politicians?parti=LFI
+
+- page et page_size : pour la pagination (afficher les résultats par lots)
+  /politicians?page=2&page_size=50
+
+Quand plusieurs paramètres sont combinés, on les sépare par un "&".
+
+Côté backend, FastAPI lit ces paramètres automatiquement depuis l'URL et les
+passe à la fonction Python correspondante comme de simples variables. Le
+développeur n'a pas à "décortiquer" l'URL manuellement.
+
+
+────────────────────────────────────────────────────────────────────────────────
+11. LES APPELS ASYNCHRONES — FAIRE 8 CHOSES EN MÊME TEMPS
+────────────────────────────────────────────────────────────────────────────────
+
+Quand vous cherchez un élu sur TranspaFrance, l'API doit aller chercher des
+informations sur 8 sources différentes : Wikipedia, NosDéputés, HATVP, News,
+Casier Politique, Propositions de loi, RNE, et Activité.
+
+L'approche naïve serait de faire ça en séquence : d'abord Wikipedia (attendons
+la réponse), puis NosDéputés (attendons la réponse), puis HATVP, etc. Si chaque
+source prend 2 secondes, ça ferait 16 secondes d'attente totale.
+
+L'approche asynchrone, c'est faire tout ça en parallèle : on lance les 8 requêtes
+en même temps, et on attend que toutes soient terminées. Si chaque source prend
+2 secondes, on attend 2 secondes au total (le temps de la plus lente), pas 16.
+
+Pour illustrer : imaginez un cuisinier qui prépare un repas avec 8 plats. Le
+cuisinier synchrone fait le plat 1 de A à Z, puis le plat 2, etc. Le cuisinier
+asynchrone met le plat 1 au four, puis prépare le plat 2 pendant que le 1 cuit,
+met le 2 au four, prépare le 3... Tout se passe en même temps.
+
+En Python, cela s'appelle asyncio. Le mot-clé "async" avant une fonction indique
+qu'elle peut "attendre" des résultats réseau sans bloquer les autres fonctions.
+Le mot "await" signifie "attends ce résultat, mais laisse les autres tâches
+continuer pendant ce temps". La commande "asyncio.gather()" lance plusieurs
+tâches asynchrones simultanément et attend qu'elles soient toutes terminées.
+
+C'est grâce à cette technique que la recherche TranspaFrance prend ~5 secondes
+au lieu des ~40 secondes qu'elle prendrait en mode séquentiel.
+
+
+────────────────────────────────────────────────────────────────────────────────
+12. LA GESTION DES ERREURS — CE QUI SE PASSE QUAND UNE SOURCE NE RÉPOND PAS
+────────────────────────────────────────────────────────────────────────────────
+
+Sur internet, rien n'est jamais garanti. Un serveur externe peut être en panne,
+trop lent, ou renvoyer des données dans un format inattendu. Une application
+robuste doit anticiper ces cas et ne jamais "planter" à cause d'une source
+défaillante.
+
+Dans TranspaFrance, chaque appel vers une source externe est encadré par ce
+qu'on appelle un bloc try/except. En langage courant, ça veut dire :
+"essaie de faire ça — si ça échoue pour n'importe quelle raison, fais autre
+chose au lieu de planter."
+
+Par exemple, si casier-politique.fr ne répond pas, l'application ne s'arrête
+pas. Elle renvoie simplement un objet vide pour cette source :
+{ "condamnations": [], "erreur": "timeout" }
+Et continue avec les autres sources.
+
+Cette philosophie est essentielle : une fiche incomplète (avec quelques données
+manquantes) est toujours meilleure qu'une erreur 500 qui empêche tout affichage.
+C'est ce qu'on appelle la "graceful degradation" (dégradation gracieuse).
+
+D'autres mécanismes de protection existent dans l'application :
+- Les timeouts : si une source ne répond pas en 10 secondes, on abandonne.
+- Le rate limiting : si quelqu'un envoie trop de requêtes (attaque ou abus),
+  l'API répond "trop de requêtes, réessayez plus tard" au lieu de s'effondrer.
+- La validation des paramètres : si le nom fourni fait moins de 3 caractères,
+  l'API refuse la requête avec un message d'erreur clair.
+
+
+────────────────────────────────────────────────────────────────────────────────
+13. LE SCRAPING — LIRE UNE PAGE WEB COMME UN HUMAIN
+────────────────────────────────────────────────────────────────────────────────
+
+Toutes les données sur internet ne sont pas disponibles via une API structurée.
+Certains sites web n'offrent que des pages HTML destinées à être lues par des
+humains dans un navigateur, sans aucun moyen "officiel" d'en extraire les données
+automatiquement.
+
+Le scraping (ou web scraping) consiste à programmer un ordinateur pour qu'il
+lise ces pages web comme le ferait un humain, et en extrait les informations
+pertinentes. C'est l'équivalent de copier-coller une table de données depuis un
+site web, mais de façon automatique et à grande échelle.
+
+Il existe deux types de scraping :
+
+1. Le scraping simple : on télécharge le code HTML de la page et on y cherche
+   les informations avec des patterns (expressions régulières, sélecteurs CSS).
+   C'est rapide et léger. On utilise httpx pour télécharger la page.
+
+2. Le scraping avec navigateur : certains sites web génèrent leur contenu
+   dynamiquement via JavaScript — le HTML téléchargé est "vide" et se remplit
+   seulement après exécution du JavaScript dans un vrai navigateur. Dans ce cas,
+   on utilise Playwright, un outil qui lance un vrai navigateur Chromium en mode
+   "headless" (invisible), navigue sur la page, attend que le contenu se charge,
+   et lit le résultat.
+
+Pour TranspaFrance, casier-politique.fr nécessite Playwright car son contenu est
+généré dynamiquement. L'outil visite le site, navigue entre les pages, attend
+le chargement, et extrait les noms et détails des condamnations.
+
+Le scraping a des limites éthiques et légales : il faut respecter les conditions
+d'utilisation des sites, ne pas surcharger leurs serveurs, et n'utiliser les
+données qu'à des fins légitimes.
+
+
+────────────────────────────────────────────────────────────────────────────────
+14. LES APIs PUBLIQUES — DES DONNÉES DÉJÀ STRUCTURÉES
+────────────────────────────────────────────────────────────────────────────────
+
+Contrairement au scraping qui extrait des données depuis des pages web destinées
+aux humains, certains organismes mettent à disposition des APIs publiques :
+des interfaces conçues spécifiquement pour que des programmes puissent lire leurs
+données de façon structurée et fiable.
+
+C'est le cas de plusieurs sources utilisées par TranspaFrance :
+
+data.gouv.fr : la plateforme des données ouvertes du gouvernement français.
+Elle héberge notamment le Répertoire National des Élus (RNE), accessible via
+une API tabular. On peut y interroger des listes de députés, sénateurs, maires,
+avec des filtres précis (par département, par nom, etc.). Les données sont
+actualisées régulièrement par le ministère de l'Intérieur.
+
+Wikipedia via l'API MediaWiki : Wikipédia propose une API gratuite qui permet
+de récupérer le contenu de n'importe quel article. On l'utilise pour récupérer
+le résumé biographique, la photo officielle, le parti politique et le bord
+politique de l'élu.
+
+L'API geo.api.gouv.fr : une API gouvernementale qui permet de convertir un code
+postal en commune, département, coordonnées GPS, etc. Elle est utilisée dans la
+recherche par code postal pour identifier le département avant d'interroger le RNE.
+
+L'avantage des APIs publiques sur le scraping est la stabilité : le format des
+données est documenté, garanti, et ne change pas sans préavis. Un site web peut
+changer de design et casser le scraping du jour au lendemain ; une API bien
+gérée change rarement de façon incompatible.
+
+
+────────────────────────────────────────────────────────────────────────────────
+15. LE RNE — QU'EST-CE QUE C'EST, COMMENT ON L'INTERROGE
+────────────────────────────────────────────────────────────────────────────────
+
+Le Répertoire National des Élus (RNE) est une base de données officielle gérée
+par le ministère de l'Intérieur français. Elle recense tous les élus en exercice
+en France : députés, sénateurs, maires, conseillers régionaux et départementaux,
+et députés européens. Elle est mise à jour régulièrement et constitue la source
+de référence pour savoir qui est élu à quoi, où, et depuis quand.
+
+Pour chaque élu, le RNE contient : le nom, le prénom, la date de naissance, la
+profession, le département, la commune (pour les maires), le libellé du groupe
+politique, et la date de début du mandat.
+
+Techniquement, le RNE est accessible via l'API de data.gouv.fr, qui expose les
+données sous forme de tableaux interrogeables. L'URL de base est :
+tabular-api.data.gouv.fr/api/resources/[ID_RESSOURCE]/data/
+
+Chaque type d'élu a son propre identifiant de ressource. Par exemple :
+- Députés : 1ac42ff4-1336-44f8-a221-832039dbc142
+- Sénateurs : b78f8945-509f-4609-a4a7-3048b8370479
+- Maires : 2876a346-d50c-4911-934e-19ee07b0e503
+
+On peut ajouter des filtres dans l'URL pour chercher par nom, par département,
+ou par commune. Par exemple, pour chercher tous les députés du Rhône, on ajoute
+le paramètre "Code du département__exact=69".
+
+Une subtilité importante : pour éviter les faux positifs (un nom de famille
+partagé par plusieurs élus dans différentes régions), on filtre toujours par nom
+ET prénom. Le prénom doit être dans la casse exacte utilisée par le RNE, car les
+comparaisons sont sensibles à la majuscule.
+
+
+────────────────────────────────────────────────────────────────────────────────
+16. NOSDÉPUTÉS.FR — QUELLE API, QUELLES DONNÉES
+────────────────────────────────────────────────────────────────────────────────
+
+NosDéputés.fr est un site indépendant géré par l'association Regards Citoyens.
+Il collecte, structure et publie des données sur l'activité des députés français :
+présences en séance, interventions, votes, amendements, etc. Ce que l'Assemblée
+nationale publie de façon peu accessible, NosDéputés le rend facilement lisible.
+
+Ce qui nous intéresse ici, c'est que NosDéputés propose une API publique et
+gratuite. Pour n'importe quel député, on peut obtenir des statistiques mensuelles
+d'activité en interrogeant des URLs de la forme :
+nosdeputes.fr/[slug-du-depute]/json
+
+Le "slug" est une version simplifiée du nom, en minuscules, avec des tirets à
+la place des espaces. Par exemple, pour "Jean-Luc Mélenchon", le slug serait
+"jean-luc-melenchon".
+
+Les données récupérées incluent : le nombre de semaines de présence, les
+présences en commission, les interventions en hémicycle, les amendements
+proposés et adoptés, les questions écrites et orales, les rapports produits,
+et l'historique des votes sur les textes de loi.
+
+Ces données sont au cœur du score de transparence de TranspaFrance. On calcule
+des moyennes mensuelles sur les 6 derniers mois disponibles et on les compare
+à la moyenne nationale (calculée sur ~580 députés actifs par mois sur la
+16e législature, de juin à décembre 2023).
+
+Limite importante : NosDéputés couvre uniquement les députés (pas les sénateurs
+ni les maires) et les données s'arrêtent à la 16e législature (jusqu'en 2024).
+Pour les élus de la 17e législature arrivés en juillet 2024, les données d'activité
+sont partielles ou absentes.
+
+
+────────────────────────────────────────────────────────────────────────────────
+17. HATVP — COMMENT ON DÉTECTE UNE DÉCLARATION
+────────────────────────────────────────────────────────────────────────────────
+
+La HATVP (Haute Autorité pour la Transparence de la Vie Publique) est un
+organisme public indépendant créé en 2013 après les scandales Cahuzac. Sa
+mission : obliger les élus et hauts fonctionnaires à déclarer leur patrimoine
+et leurs intérêts, et rendre ces déclarations publiques.
+
+Chaque député, sénateur, et de nombreux élus locaux ont l'obligation légale de
+déposer deux types de déclarations auprès de la HATVP :
+1. La déclaration de patrimoine : liste de tous leurs biens (immobilier, comptes
+   bancaires, voitures, œuvres d'art...)
+2. La déclaration d'intérêts : liste de toutes leurs activités, participations
+   dans des entreprises, fonctions rémunérées, etc.
+
+Ces déclarations sont consultables en ligne sur hatvp.fr.
+
+Dans TranspaFrance, on détecte la présence d'une déclaration HATVP en
+construisant une URL de recherche sur le site hatvp.fr avec le nom de l'élu,
+puis en vérifiant si cette URL renvoie un résultat valide. Si une déclaration
+est trouvée, l'élu obtient les 10 points du critère "Transparence HATVP" dans
+son score. Sinon, il obtient 0.
+
+C'est une approche binaire simple : soit l'élu a joué le jeu de la transparence
+et publié ses déclarations, soit il ne l'a pas fait. Ce critère représente 10%
+du score final, car la transparence patrimoniale est considérée comme un
+indicateur important d'intégrité publique.
+
+
+────────────────────────────────────────────────────────────────────────────────
+18. CASIER POLITIQUE — SCRAPING AVEC PLAYWRIGHT
+────────────────────────────────────────────────────────────────────────────────
+
+Casier-politique.fr est un site indépendant qui recense les condamnations
+judiciaires de personnalités politiques françaises. Il compile des informations
+issues de décisions de justice publiques, de communiqués de presse, et d'articles
+de presse judiciaire.
+
+Ce site ne propose pas d'API. Ses données sont affichées sous forme de pages web
+paginées, avec un système de filtres et de navigation dynamique. Pour en extraire
+les données automatiquement, on utilise Playwright.
+
+Playwright est un outil développé par Microsoft qui permet de contrôler un
+navigateur web (Chromium, Firefox, ou Safari) par programmation. On peut lui
+donner des instructions comme : "ouvre cette page", "attends que cet élément
+apparaisse", "clique sur ce bouton", "lis le texte de cette zone". Il exécute
+ces instructions exactement comme le ferait un humain avec sa souris et son clavier.
+
+Pour TranspaFrance, voici ce que fait le scraper Casier Politique :
+1. Il ouvre casier-politique.fr dans un navigateur Chromium invisible
+2. Il attend que la page soit chargée (le contenu est généré dynamiquement)
+3. Il lit le texte de la page et identifie les noms, partis, et détails
+4. Il navigue vers les pages suivantes et répète l'opération
+5. Il indexe les résultats dans Redis par nom d'élu
+
+Pour une recherche individuelle, il vérifie si le nom de l'élu apparaît dans
+l'index et retourne les condamnations associées avec leur statut (première
+instance, appel, cassation/définitif). Ce statut est crucial pour le calcul
+du score : une condamnation définitive retire 20 points, une condamnation en
+appel 14 points, et une condamnation en première instance 10 points.
+
+
+────────────────────────────────────────────────────────────────────────────────
+19. LES SOURCES MULTIPLES — AGRÉGER, RÉCONCILIER, COMPARER
+────────────────────────────────────────────────────────────────────────────────
+
+L'une des grandes difficultés de TranspaFrance est qu'aucune source unique ne
+contient toutes les informations dont on a besoin. On doit donc interroger 8
+sources différentes, chacune spécialisée dans un domaine, et assembler le puzzle.
+
+Mais agréger des données de sources multiples soulève des problèmes concrets :
+
+La réconciliation des noms : Wikipedia écrit "François Hollande", le RNE écrit
+"HOLLANDE François", NosDéputés écrit "francois-hollande". Pour relier ces trois
+entrées à la même personne, on normalise les noms (minuscules, sans accents,
+sans caractères spéciaux) avant toute comparaison.
+
+Les données contradictoires : une source peut dire qu'un élu est dans tel parti,
+une autre dire autre chose (suite à un changement de parti non mis à jour). Dans
+ce cas, on choisit une source prioritaire (Wikipedia pour le parti, RNE pour les
+mandats officiels) et on indique la source de chaque information.
+
+Les données manquantes : si NosDéputés ne connaît pas un élu (sénateur, ou élu
+très récent), les champs d'activité parlementaire sont vides. On signale alors
+que le score est "partiel" plutôt que d'afficher un score faussement bas.
+
+La fraîcheur des données : certaines sources sont mises à jour en temps réel
+(RNE), d'autres hebdomadairement (NosDéputés), d'autres rarement (Wikipedia).
+On ne mélange pas des données d'actualité avec des données potentiellement
+obsolètes sans l'indiquer à l'utilisateur.
+
+Cette orchestration de sources multiples est le cœur intellectuel de TranspaFrance.
+C'est elle qui permet d'offrir une vue agrégée qu'aucune source individuelle
+ne pourrait fournir seule.
+
+
+────────────────────────────────────────────────────────────────────────────────
+20. LE CACHE REDIS — POURQUOI ET COMMENT
+────────────────────────────────────────────────────────────────────────────────
+
+Redis est une base de données en mémoire ultra-rapide. "En mémoire" signifie
+que les données sont stockées dans la RAM de l'ordinateur, pas sur un disque dur.
+Résultat : les lectures et écritures sont des milliers de fois plus rapides
+qu'une base de données classique.
+
+On l'utilise comme système de cache. Un cache, c'est une mémoire temporaire qui
+stocke les résultats déjà calculés pour ne pas avoir à les recalculer. C'est
+exactement ce que fait votre cerveau : si on vous pose deux fois la même question
+à cinq minutes d'intervalle, vous donnez directement la réponse mémorisée sans
+refaire le calcul.
+
+Dans TranspaFrance, le flux est le suivant :
+
+1. Un utilisateur cherche "Marine Le Pen"
+2. L'API vérifie dans Redis : est-ce que cette fiche est déjà en cache ?
+3. Si oui (CACHE HIT) : on retourne directement le résultat stocké. Durée : ~50ms
+4. Si non (CACHE MISS) : on fait les 8 appels externes, on assemble la fiche,
+   on la stocke dans Redis, et on la retourne. Durée : ~5-15 secondes
+
+Chaque entrée de cache a une durée de vie (TTL : Time To Live). Pour TranspaFrance,
+les fiches de politiciens ont un TTL de 7 jours. Au bout de 7 jours, Redis efface
+automatiquement l'entrée. La prochaine requête sera plus lente, mais les données
+seront fraîches.
+
+Redis stocke les données sous forme de paires clé-valeur. La clé est une chaîne
+unique basée sur le nom de l'élu, la valeur est la fiche complète au format JSON.
+Sur Railway, Redis fonctionne dans un service séparé mais dans le même réseau
+privé que l'API, ce qui garantit des échanges rapides et sécurisés.
+
+
+────────────────────────────────────────────────────────────────────────────────
+21. LE TTL — DURÉE DE VIE D'UNE DONNÉE EN CACHE
+────────────────────────────────────────────────────────────────────────────────
+
+TTL signifie "Time To Live" — littéralement "temps à vivre". C'est la durée
+pendant laquelle une donnée mise en cache reste valide avant d'être automatique-
+ment effacée.
+
+C'est un équilibre délicat entre deux objectifs contradictoires :
+- Performance : plus le TTL est long, plus les données sont souvent servies
+  depuis le cache (rapide), et moins on sollicite les sources externes.
+- Fraîcheur : plus le TTL est court, plus les données sont récentes, mais plus
+  on interroge fréquemment les sources (lent et coûteux).
+
+Dans TranspaFrance, chaque type de données a un TTL adapté à sa fréquence
+de changement :
+
+- Fiches politiciens : 7 jours
+  Les informations sur un élu (mandats, activité, score) changent peu en une
+  semaine. 7 jours est un bon compromis, surtout avec le précalcul bimensuel
+  qui vient régénérer les fiches de toute façon.
+
+- Condamnations : 7 jours
+  Les décisions judiciaires ne changent pas fréquemment. 7 jours est adapté.
+
+- Votes et propositions : 24 heures
+  L'activité parlementaire peut évoluer quotidiennement en période de session.
+
+- Actualités : 2 heures
+  Les news sont par définition éphémères. 2 heures garantit un contenu récent.
+
+Si un utilisateur a besoin de forcer une mise à jour avant expiration du TTL,
+le paramètre "?refresh=true" dans l'URL contourne le cache et force un
+rechargement complet depuis toutes les sources.
+
+
+────────────────────────────────────────────────────────────────────────────────
+22. LE PRÉCALCUL BIMENSUEL — PRÉ-CHARGER LES FICHES À L'AVANCE
+────────────────────────────────────────────────────────────────────────────────
+
+Le précalcul est une stratégie qui consiste à calculer les réponses à l'avance,
+avant même que les utilisateurs ne les demandent. Plutôt que d'attendre qu'un
+utilisateur cherche "Olivier Dussopt" pour déclencher les 8 appels externes,
+on fait ces appels en avance, on stocke le résultat en cache, et quand l'utilisateur
+cherche, on lui répond instantanément depuis le cache.
+
+C'est l'équivalent d'un restaurant qui prépare ses sauces et ses garnitures le
+matin pour être prêt à servir rapidement le soir. Les plats du jour sont partiellement
+préparés à l'avance — le service est plus rapide.
+
+Pour TranspaFrance, le script precalcul_fiches.py fait ceci :
+1. Il récupère la liste complète des 577 députés et 348 sénateurs depuis le RNE
+2. Pour chacun des 925 élus, il appelle l'endpoint /politician?refresh=true
+3. Ces appels s'exécutent avec un semaphore de 5 (5 appels simultanés au maximum
+   pour ne pas surcharger Railway ni les sources externes)
+4. Chaque fiche calculée est automatiquement stockée dans Redis avec un TTL de 7 jours
+
+Ce script tourne deux fois par mois via un cron job sur Railway (1er et 15 du
+mois à 3h du matin, quand le trafic est nul). Il s'exécute en arrière-plan pendant
+environ 45 minutes sans aucune intervention humaine.
+
+Résultat : les 925 fiches les plus consultées sont toujours "chaudes" en cache.
+La grande majorité des recherches des utilisateurs renvoie une réponse en moins
+d'une seconde au lieu de 5 à 15 secondes.
+
+
+────────────────────────────────────────────────────────────────────────────────
+23. LE RATE LIMITING — PROTÉGER L'API DES ABUS
+────────────────────────────────────────────────────────────────────────────────
+
+Le rate limiting (limitation de débit) est un mécanisme qui limite le nombre
+de requêtes qu'un utilisateur ou un service peut envoyer à l'API dans un
+intervalle de temps donné.
+
+Pourquoi en a-t-on besoin ? Plusieurs raisons :
+
+1. Protection contre les attaques par déni de service (DDoS) : quelqu'un de
+   malveillant pourrait envoyer des millions de requêtes pour surcharger le
+   serveur et le rendre inaccessible pour tous les autres.
+
+2. Protection des sources externes : si 100 personnes cherchent simultanément
+   des informations, l'API ferait 800 appels simultanés vers les sources
+   externes (Wikipedia, RNE, etc.), ce qui pourrait les surcharger et entraîner
+   des blocages.
+
+3. Équité : éviter qu'un seul utilisateur monopolise toutes les ressources au
+   détriment des autres.
+
+Dans TranspaFrance, on utilise la bibliothèque SlowAPI (intégrée à FastAPI)
+pour appliquer des limites par adresse IP :
+- /politician : maximum 20 requêtes par minute par IP
+- /politicians : maximum 60 requêtes par minute par IP
+- /cache/stats : maximum 10 requêtes par minute par IP
+
+Si un utilisateur dépasse la limite, il reçoit une réponse HTTP 429
+("Too Many Requests") avec un message lui demandant de ralentir. Ce n'est
+pas une erreur permanente — il peut recommencer après la fenêtre d'une minute.
+
+Pour les appels internes (comme le précalcul), on utilise un asyncio.Semaphore
+qui limite à 5 le nombre d'appels simultanés, pour une raison similaire.
+
+
+────────────────────────────────────────────────────────────────────────────────
+24. REACT — POURQUOI, C'EST QUOI
+────────────────────────────────────────────────────────────────────────────────
+
+React est une bibliothèque JavaScript créée par Facebook (Meta) en 2013. Elle
+est aujourd'hui l'une des plus utilisées au monde pour construire des interfaces
+web modernes.
+
+Avant React, construire une interface web dynamique était laborieux : on
+manipulait le HTML directement avec du JavaScript, on devait garder la page
+synchronisée avec les données à la main, et le code devenait vite impossible
+à maintenir.
+
+React a révolutionné cette approche avec deux idées principales :
+
+1. Les composants : React découpe l'interface en blocs réutilisables et
+   indépendants. La SearchBar est un composant. La ScoreCard est un composant.
+   PoliticianDetail est un composant. Chaque composant gère son propre affichage
+   et peut être réutilisé à plusieurs endroits. C'est comme des briques Lego
+   spécialisées qu'on assemble.
+
+2. La réactivité (état) : quand une donnée change (par exemple, l'utilisateur
+   saisit un nouveau nom), React met à jour automatiquement les parties de la
+   page qui dépendent de cette donnée, sans recharger toute la page. C'est
+   ce qui donne l'impression d'une application native plutôt que d'un site web
+   classique.
+
+Dans TranspaFrance, React gère tout ce qui est affiché : la liste des élus,
+les onglets de la fiche individuelle, le score, les indemnités, la recherche
+par code postal. Chaque donnée récupérée depuis l'API Python est transformée
+en interface visuelle par les composants React.
+
+
+────────────────────────────────────────────────────────────────────────────────
+25. LES COMPOSANTS — L'APPROCHE MODULAIRE
+────────────────────────────────────────────────────────────────────────────────
+
+Un composant React est un bloc d'interface autonome et réutilisable. Pensez à
+lui comme à une pièce de puzzle spécialisée : elle a une forme précise, remplit
+une fonction précise, et s'assemble avec d'autres pièces pour former l'image
+complète.
+
+Chaque composant est défini dans son propre fichier .jsx et contient :
+- Sa logique (ce qu'il fait quand l'utilisateur interagit)
+- Son apparence (le HTML qu'il affiche et son style)
+- Ses "entrées" appelées props (propriétés), que le composant parent lui passe
+
+Dans TranspaFrance, voici les principaux composants et leurs rôles :
+
+Header.jsx : le bandeau supérieur avec le logo et le titre. Cliquable pour
+revenir à l'accueil.
+
+SearchBar.jsx : la barre de recherche par nom de personnalité.
+
+CodePostalSearch.jsx : la recherche par code postal, avec affichage des élus
+(maire, député, sénateur) de la commune.
+
+PoliticiansList.jsx : la liste de tous les élus avec filtres et badges.
+
+PoliticianDetail.jsx : la fiche complète d'un élu, avec ses onglets (Score,
+Condamnations, Votes, Mandats, Indemnités, Actualités).
+
+ScoreCard.jsx : l'onglet Score avec la jauge 0-100 et le détail des critères.
+
+IndemnitesCard.jsx : l'onglet Indemnités avec les deux totaux (ce que perçoit
+l'élu vs coût contribuable) et le détail de chaque poste.
+
+Sources.jsx : la page explicative sur les sources de données utilisées.
+
+Cette modularité facilite la maintenance : si l'affichage des indemnités doit
+changer, on ne modifie que IndemnitesCard.jsx sans toucher au reste.
+
+
+────────────────────────────────────────────────────────────────────────────────
+26. VITE — L'OUTIL QUI COMPILE ET SERT REACT
+────────────────────────────────────────────────────────────────────────────────
+
+Le code React qu'on écrit n'est pas directement compréhensible par les navigateurs
+web. Les navigateurs comprennent du HTML, du CSS, et du JavaScript standard —
+pas du JSX (la syntaxe React qui mélange HTML et JavaScript dans le même fichier).
+
+Vite est un outil de build (construction) qui transforme le code React en fichiers
+HTML, CSS et JavaScript standards que n'importe quel navigateur peut lire.
+Ce processus s'appelle la compilation ou le bundling.
+
+Vite fait deux choses :
+
+1. En développement : il lance un serveur local (sur votre ordinateur) qui
+   sert le site sur "http://localhost:5173". Il surveille les fichiers en temps
+   réel et recharge instantanément le navigateur à chaque modification de code.
+   C'est ce qu'on appelle le "hot reload" — pas besoin de rafraîchir manuellement
+   la page.
+
+2. En production : il compile et optimise tout le code en fichiers aussi légers
+   et rapides que possible (minification, tree-shaking pour supprimer le code
+   inutilisé, découpage en morceaux chargés à la demande). C'est ce bundle
+   optimisé que Vercel déploie et distribue via son CDN.
+
+Vite est particulièrement apprécié pour sa rapidité : là où d'anciens outils
+(comme Webpack) prenaient parfois 30 secondes pour démarrer, Vite démarre en
+moins d'une seconde grâce à une architecture moderne basée sur les modules ES
+natifs du navigateur.
+
+
+────────────────────────────────────────────────────────────────────────────────
+27. LES APPELS FETCH — COMMENT LE FRONT PARLE AU BACK
+────────────────────────────────────────────────────────────────────────────────
+
+Fetch est une fonction JavaScript native des navigateurs modernes qui permet
+d'envoyer des requêtes HTTP depuis le frontend vers un serveur distant — en
+l'occurrence notre API sur Railway.
+
+Le principe est simple : le composant React appelle fetch() avec l'URL de l'API,
+attend la réponse, et met à jour son état avec les données reçues. React se
+charge ensuite de mettre à jour l'affichage automatiquement.
+
+Dans TranspaFrance, le flux d'une recherche est :
+
+1. L'utilisateur tape "Cédric Villani" et clique sur Rechercher
+2. React appelle :
+   fetch("https://web-production-6c245.up.railway.app/politician?name=Cédric+Villani")
+3. Le backend Python reçoit la requête, fait ses calculs, et répond en JSON
+4. React reçoit le JSON et met à jour l'état "result" avec les données
+5. Le composant PoliticianDetail se redessine avec les nouvelles données
+
+Pendant l'attente de la réponse, React affiche un message "Recherche en cours..."
+(l'état "loading" est à vrai). Quand la réponse arrive, loading passe à faux
+et le résultat s'affiche.
+
+Un point important : les navigateurs ont une règle de sécurité appelée CORS
+(Cross-Origin Resource Sharing) qui, par défaut, interdit à une page web de
+faire des requêtes vers un domaine différent. Comme le frontend est sur vercel.app
+et le backend sur railway.app, on a dû configurer le backend pour autoriser
+explicitement ces requêtes cross-origine.
+
+
+────────────────────────────────────────────────────────────────────────────────
+28. LE SCORE DE TRANSPARENCE — COMMENT ON L'A CONSTRUIT ET PONDÉRÉ
+────────────────────────────────────────────────────────────────────────────────
+
+Le Score de Transparence TranspaFrance est un indicateur synthétique sur 100
+points qui mesure la présence, l'activité, l'intégrité et la transparence d'un
+élu. Il ne mesure pas la qualité politique — un élu très présent peut voter des
+lois contestables. Il mesure objectivement des données publiques vérifiables.
+
+Le score se compose de 6 critères pondérés :
+
+Présence (25 points) : mesure les semaines de présence en hémicycle et en
+commission. Comparée à la moyenne nationale réelle de 3,34 semaines/mois calculée
+sur ~580 députés actifs (juin-décembre 2023, source NosDéputés). Un élu à la
+moyenne obtient 25/25.
+
+Initiative législative (20 points) : somme des amendements proposés et des
+propositions de loi déposées. Moyenne nationale : 22,66 amendements/mois.
+
+Engagement (15 points) : interventions en hémicycle et questions au gouvernement.
+Moyenne nationale : 16,84 interventions/mois.
+
+Condamnations (20 points) : c'est un critère soustractif. Sans condamnation :
+20/20. Condamnation définitive : 0/20. En appel : 6/20. En première instance :
+10/20. Source : casier-politique.fr.
+
+Cumul de mandats (10 points) : mandat unique = 10/10. Double mandat = 5/10.
+Triple mandat ou plus = 0/10. Source : RNE.
+
+Transparence HATVP (10 points) : déclaration de patrimoine et d'intérêts publiée
+= 10/10. Absente = 0/10.
+
+Le score final est le rapport entre les points obtenus et les points disponibles,
+multiplié par 100. Si des données sont manquantes (NosDéputés ne couvre pas les
+sénateurs), le score est marqué "partiel" et calculé sur les critères disponibles.
+
+
+────────────────────────────────────────────────────────────────────────────────
+29. LA DÉTECTION DU CUMUL DE MANDATS — CROISER LES SOURCES
+────────────────────────────────────────────────────────────────────────────────
+
+Le cumul de mandats est la situation où un élu exerce simultanément plusieurs
+fonctions électives. En France, la loi de 2014 a limité le cumul, mais certaines
+combinaisons restent légales (ex : député + maire d'une petite commune).
+
+Détecter le cumul n'est pas trivial : aucune source unique ne dit "cet élu cumule
+tel et tel mandat". Il faut interroger plusieurs registres et croiser les
+résultats.
+
+Dans TranspaFrance, la détection se fait via le RNE. On interroge simultanément
+les 6 ressources du RNE (députés, sénateurs, maires, conseillers régionaux,
+conseillers départementaux, députés européens) avec le nom et le prénom de l'élu.
+Si son nom apparaît dans plusieurs listes, il cumule.
+
+Pour une fiche individuelle : on fait 6 requêtes en parallèle et on regroupe tous
+les mandats trouvés dans une liste. Si la liste contient plus d'un élément, c'est
+un cumul.
+
+Pour la liste de tous les élus (endpoint /politicians) : on utilise un Semaphore
+de 20 pour faire ces vérifications de cumul en parallèle pour tous les élus de
+la page, sans surcharger l'API du RNE.
+
+Une subtilité technique : les prénoms dans le RNE ne sont pas toujours en
+majuscules. "Jérôme" peut être écrit "JÉRÔME" dans un registre et "Jérôme" dans
+un autre. On filtre avec la casse d'origine pour éviter les faux positifs — comme
+le cas de Jérôme Buisson qui remontait 22 mandats parce qu'on cherchait "BUISSON"
+sans le prénom, et il y avait 22 élus du nom Buisson dans toute la France.
+
+
+────────────────────────────────────────────────────────────────────────────────
+30. LES DONNÉES MANQUANTES — GÉRER LE PARTIEL, L'INCERTITUDE, LES LIMITES
+────────────────────────────────────────────────────────────────────────────────
+
+Une application de transparence politique a une responsabilité particulière :
+ne pas induire en erreur. Présenter une donnée manquante comme si elle était
+zéro serait trompeur. Refuser d'afficher quoi que ce soit quand une source
+manque serait inutile. Il faut trouver l'équilibre juste.
+
+Dans TranspaFrance, plusieurs cas de données manquantes ont été traités :
+
+Score partiel : si NosDéputés ne connaît pas l'élu (sénateur, nouveau député),
+les critères de présence, initiative et engagement ne peuvent pas être calculés.
+Plutôt que d'afficher un score de 35/100 (qui serait faussement bas), on calcule
+le score sur les critères disponibles (condamnations + cumul + HATVP = 40 points
+possibles) et on marque le score "partiel". L'utilisateur sait que ce score est
+incomplet.
+
+Sources en erreur : si une source externe est temporairement indisponible
+(timeout, erreur serveur), l'application n'affiche pas d'erreur globale. Elle
+renvoie les données des autres sources et marque la source défaillante avec
+{ "erreur": "timeout" }. L'affichage est incomplet mais reste utile.
+
+Données non exhaustives : casier-politique.fr n'est pas exhaustif — il peut
+manquer des condamnations si elles n'ont pas été médiatisées ou indexées. L'appli-
+cation l'indique explicitement dans le score et dans la source : "base non
+exhaustive". Une absence de condamnation dans cette base ne signifie pas
+nécessairement l'absence de toute condamnation.
+
+Données de la 16e législature : les moyennes nationales utilisées pour le score
+sont calculées sur la 16e législature (2022-2024). Pour les élus arrivés lors
+de la 17e législature (juillet 2024), leurs données d'activité couvrent une
+période plus courte — le score peut donc être pénalisé par rapport à un élu
+plus ancien. Cette limite est affichée dans l'explication du score.
+
+En résumé : la transparence sur les limites des données est aussi importante que
+les données elles-mêmes. Une application honnête dit clairement ce qu'elle ne
+sait pas.
+
+
+================================================================================
+FIN DU DOCUMENT
+TranspaFrance — guide rédigé le 11 mai 2026
+================================================================================
