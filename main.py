@@ -361,13 +361,15 @@ async def get_politicians(
                     print(f"[POLITICIANS] Erreur {label}: {e}")
                     continue
 
-            # Vérification cumul en parallèle pour tous les élus de la page
+            # Vérification cumul en parallèle — return_exceptions évite qu'une erreur vide la liste
             cumul_results = await _asyncio.gather(*[
                 _check_cumul(client, e["nom_famille"], e["prenom"], e["type_mandat"])
                 for e in elus_raw
-            ])
+            ], return_exceptions=True)
 
             for elu, types in zip(elus_raw, cumul_results):
+                if isinstance(types, Exception):
+                    types = [elu["type_mandat"]]
                 elu["cumul_mandats"] = len(types) > 1
                 elu["types_mandats"] = types
                 elus.append(elu)
