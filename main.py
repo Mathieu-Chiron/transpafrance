@@ -77,6 +77,35 @@ async def get_stats(request: Request):
             "erreur":             str(e),
         }
 
+@app.get("/affaires")
+@limiter.limit("30/minute")
+async def get_affaires(request: Request):
+    import redis as _redis, json as _json, os as _os
+    try:
+        r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+        keys = r.keys("politico:condamnations:*")
+        elus = []
+        for key in keys:
+            try:
+                val = r.get(key)
+                if not val:
+                    continue
+                data = _json.loads(val)
+                nb = data.get("nb", 0)
+                if nb > 0:
+                    elus.append({
+                        "nom":          data.get("nom", key.replace("politico:condamnations:", "").replace("_", " ").title()),
+                        "nb":           nb,
+                        "type_mandat":  data.get("type_mandat", ""),
+                        "condamnations": data.get("condamnations", []),
+                    })
+            except Exception:
+                continue
+        elus.sort(key=lambda x: x["nb"], reverse=True)
+        return {"elus": elus, "total": len(elus)}
+    except Exception as e:
+        return {"elus": [], "total": 0, "erreur": str(e)}
+
 @app.get("/politician/votes")
 @limiter.limit("30/minute")
 async def get_politician_votes(
@@ -253,6 +282,20 @@ async def get_politician(
     response["resultats"]["score"] = score
 
     set_cache(name, response, "politician")
+
+    # Index condamnations pour /stats et /affaires
+    try:
+        import redis as _ri, json as _js, os as _os2
+        _r = _ri.from_url(_os2.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+        cond_list = casier.get("condamnations", [])
+        _r.setex(
+            f"politico:condamnations:{name.lower().replace(' ', '_')}",
+            60 * 60 * 24 * 7,
+            _js.dumps({"nb": len(cond_list), "nom": name, "condamnations": cond_list, "type_mandat": type_mandat}, ensure_ascii=False),
+        )
+    except Exception:
+        pass
+
     return response
 
 
