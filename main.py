@@ -46,10 +46,10 @@ async def get_stats(request: Request):
     import redis as _redis, json as _json, os as _os
     try:
         r = _redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
-        keys = r.keys("politico:condamnations:*")
+        # D'abord depuis l'index dédié
         elus_avec_affaires = 0
         total_procedures   = 0
-        for key in keys:
+        for key in r.keys("politico:condamnations:*"):
             try:
                 val = r.get(key)
                 if val:
@@ -60,6 +60,21 @@ async def get_stats(request: Request):
                         total_procedures   += nb
             except Exception:
                 continue
+
+        # Fallback : lire depuis le cache politician si l'index est vide
+        if elus_avec_affaires == 0:
+            for key in r.keys("politico:politician:*"):
+                try:
+                    val = r.get(key)
+                    if not val:
+                        continue
+                    data  = _json.loads(val)
+                    conds = data.get("resultats", {}).get("condamnations", {}).get("condamnations", [])
+                    if conds:
+                        elus_avec_affaires += 1
+                        total_procedures   += len(conds)
+                except Exception:
+                    continue
         return {
             "deputes":             577,
             "senateurs":           348,
