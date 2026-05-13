@@ -108,6 +108,7 @@ async def get_nosdeputes_info(name: str) -> dict:
                 "votes":            votes,
                 "propositions_loi": [],
                 "url_an":           fiche.get("url_an"),
+                "photo":            f"{SOURCE_URL}/depute/photo/{slug}/120",
                 "source_url":       fiche.get("url_nosdeputes") or f"{SOURCE_URL}/{slug}",
             }
 

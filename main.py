@@ -280,7 +280,7 @@ async def get_politician(
                 "parti":          parti,
                 "bord_politique": wikipedia.get("bord_politique") or get_bord_politique(parti),
                 "naissance":      wikipedia.get("naissance") or rne.get("date_naissance"),
-                "photo":          wikipedia.get("photo"),
+                "photo":          nosdeputes.get("photo") or wikipedia.get("photo"),
                 "resume":         wikipedia.get("resume"),
                 "profession":     rne.get("profession"),
                 "source":         url_wikipedia,
