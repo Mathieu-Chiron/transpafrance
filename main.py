@@ -92,6 +92,48 @@ async def get_stats(request: Request):
             "erreur":             str(e),
         }
 
+@app.get("/search")
+@limiter.limit("60/minute")
+async def search_elus(request: Request, q: str = Query(..., min_length=3)):
+    import httpx as _httpx
+    RNE = "https://tabular-api.data.gouv.fr/api/resources/{}/data/"
+    RESSOURCES = {
+        "Député":   "1ac42ff4-1336-44f8-a221-832039dbc142",
+        "Sénateur": "b78f8945-509f-4609-a4a7-3048b8370479",
+    }
+    q_upper = q.strip().upper()
+    resultats = []
+    try:
+        async with _httpx.AsyncClient(timeout=8) as client:
+            tasks = [
+                client.get(RNE.format(rid), params={"Nom de l'élu__icontains": q_upper, "page_size": 8})
+                for rid in RESSOURCES.values()
+            ]
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            for (label, _), resp in zip(RESSOURCES.items(), responses):
+                if isinstance(resp, Exception) or resp.status_code != 200:
+                    continue
+                for row in resp.json().get("data", []):
+                    prenom = row.get("Prénom de l'élu", "") or ""
+                    nom    = row.get("Nom de l'élu", "") or ""
+                    nom_complet = f"{prenom} {nom}".strip()
+                    if nom_complet:
+                        resultats.append({
+                            "nom":         nom_complet,
+                            "type_mandat": label,
+                            "departement": row.get("Libellé du département") or "",
+                        })
+        # Déduplication par nom
+        seen = set()
+        uniques = []
+        for r in resultats:
+            if r["nom"] not in seen:
+                seen.add(r["nom"])
+                uniques.append(r)
+        return {"resultats": uniques[:10]}
+    except Exception as e:
+        return {"resultats": [], "erreur": str(e)}
+
 @app.get("/affaires")
 @limiter.limit("30/minute")
 async def get_affaires(request: Request):
