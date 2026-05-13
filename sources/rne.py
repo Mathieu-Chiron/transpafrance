@@ -46,11 +46,20 @@ async def get_rne_info(name: str) -> dict:
 
             tous = [item for groupe in resultats for item in groupe]
 
-            mandats = []
+            # Déduplique par date de naissance : on ne garde que les mandats
+            # de la même personne que le premier résultat trouvé
             premier = None
-            for label, row in tous:
+            ddn_ref = None
+            for _, row in tous:
                 if premier is None:
-                    premier = row
+                    premier  = row
+                    ddn_ref  = row.get("Date de naissance")
+                    break
+
+            mandats = []
+            for label, row in tous:
+                if ddn_ref and row.get("Date de naissance") != ddn_ref:
+                    continue  # autre personne portant le même nom
                 mandats.append({
                     "type":        label,
                     "departement": row.get("Libellé du département"),
