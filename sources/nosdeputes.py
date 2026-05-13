@@ -153,7 +153,8 @@ async def get_votes_historique(
                 }
 
             tous = [_parse_vote(v) for v in _to_list(resp.json().get("votes"))]
-            tous = [v for v in tous if v["texte"]]  # filtre les votes sans titre
+            tous = [v for v in tous if v["texte"]]
+            tous.sort(key=lambda v: v.get("date") or "", reverse=True)
 
             # Filtre mot-clé
             if query:
