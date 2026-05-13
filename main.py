@@ -63,8 +63,8 @@ async def get_stats(request: Request):
         return {
             "deputes":             577,
             "senateurs":           348,
-            "elus_avec_affaires":  elus_avec_affaires,
-            "total_procedures":    total_procedures,
+            "elus_avec_affaires":  elus_avec_affaires if elus_avec_affaires > 0 else None,
+            "total_procedures":    total_procedures   if total_procedures   > 0 else None,
             "donnees_publiques":   "100%",
         }
     except Exception as e:
