@@ -11,6 +11,8 @@ from sources.nosdeputes import get_nosdeputes_info, get_votes_historique
 from sources.hatvp import get_hatvp_info
 from sources.news import get_news_info
 from sources.casier import get_casier_politique_info
+from sources.wikidata_affaires import get_wikidata_affaires
+from sources.opensanctions import get_opensanctions_info
 from sources.propositions import get_propositions_info
 from sources.rne import get_rne_info
 from sources.activite import get_activite_info
@@ -229,6 +231,7 @@ async def get_politician(
         get_hatvp_info(name),
         get_news_info(name),
         get_casier_politique_info(name),
+        get_wikidata_affaires(name),
         get_propositions_info(name),
         get_rne_info(name),
         get_activite_info(name),
@@ -245,9 +248,14 @@ async def get_politician(
     hatvp        = safe(results[2])
     news         = safe(results[3])
     casier       = safe(results[4])
-    propositions = safe(results[5])
-    rne          = safe(results[6])
-    activite     = safe(results[7])
+    wikidata_aff = safe(results[5])
+    propositions = safe(results[6])
+    rne          = safe(results[7])
+    activite     = safe(results[8])
+
+    # OpenSanctions : utilise le QID Wikidata si disponible pour plus de précision
+    qid = wikidata_aff.get("qid")
+    opensanctions = await get_opensanctions_info(name, qid=qid)
 
     parti = wikipedia.get("parti") or nosdeputes.get("parti")
 
@@ -268,8 +276,17 @@ async def get_politician(
     url_wikipedia  = wikipedia.get("source_url") or f"https://fr.wikipedia.org/wiki/{name.replace(' ', '_')}"
     url_nosdeputes = nosdeputes.get("source_url") or f"https://www.nosdeputes.fr/{slug}"
     url_hatvp      = hatvp.get("source_url") or f"https://www.hatvp.fr/consulter-les-declarations/?s={name.replace(' ', '+')}"
-    url_casier     = casier.get("source_url") or "https://casier-politique.fr"
-    url_an         = nosdeputes.get("url_an")
+    url_casier        = casier.get("source_url") or "https://casier-politique.fr"
+    url_wikidata      = wikidata_aff.get("source_url")
+    url_opensanctions = opensanctions.get("source_url")
+    url_an            = nosdeputes.get("url_an")
+
+    # Fusion des affaires judiciaires (casier + wikidata + opensanctions)
+    all_affaires = []
+    all_affaires += [{"source": "casier-politique.fr", "type": "condamnation", **c}
+                     for c in casier.get("condamnations", [])]
+    all_affaires += wikidata_aff.get("affaires", [])
+    all_affaires += opensanctions.get("affaires", [])
 
     response = {
         "recherche": name,
@@ -286,11 +303,13 @@ async def get_politician(
                 "source":         url_wikipedia,
             },
             "liens": {
-                "wikipedia":   url_wikipedia,
-                "nosdeputes":  url_nosdeputes,
-                "assemblee":   url_an,
-                "hatvp":       url_hatvp,
-                "casier":      url_casier,
+                "wikipedia":      url_wikipedia,
+                "nosdeputes":     url_nosdeputes,
+                "assemblee":      url_an,
+                "hatvp":          url_hatvp,
+                "casier":         url_casier,
+                "wikidata":       url_wikidata,
+                "opensanctions":  url_opensanctions,
             },
             "mandats": {
                 "mandats_rne":     mandats_rne,
@@ -324,9 +343,13 @@ async def get_politician(
                 "source_hatvp": url_hatvp,
             },
             "condamnations": {
-                "trouve":        casier.get("trouve"),
-                "condamnations": casier.get("condamnations", []),
-                "source":        url_casier,
+                "trouve":        len(all_affaires) > 0,
+                "condamnations": all_affaires,
+                "sources_consultees": [
+                    {"nom": "casier-politique.fr", "url": url_casier,        "nb": len(casier.get("condamnations", []))},
+                    {"nom": "Wikidata",             "url": url_wikidata,      "nb": len(wikidata_aff.get("affaires", []))},
+                    {"nom": "OpenSanctions",        "url": url_opensanctions, "nb": len(opensanctions.get("affaires", []))},
+                ],
             },
             "affaires_et_condamnations_presse": {
                 "articles": news.get("affaires", []),
@@ -342,7 +365,7 @@ async def get_politician(
 
     score = calculer_score(
         stats_moyennes = activite.get("stats_moyennes", {}),
-        condamnations  = casier.get("condamnations", []),
+        condamnations  = all_affaires,
         mandats_rne    = rne.get("mandats", []),
         hatvp_url      = hatvp.get("source_url", ""),
     )
@@ -354,11 +377,10 @@ async def get_politician(
     try:
         import redis as _ri, json as _js, os as _os2
         _r = _ri.from_url(_os2.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
-        cond_list = casier.get("condamnations", [])
         _r.setex(
             f"politico:condamnations:{name.lower().replace(' ', '_')}",
             60 * 60 * 24 * 7,
-            _js.dumps({"nb": len(cond_list), "nom": name, "condamnations": cond_list, "type_mandat": type_mandat}, ensure_ascii=False),
+            _js.dumps({"nb": len(all_affaires), "nom": name, "condamnations": all_affaires, "type_mandat": type_mandat}, ensure_ascii=False),
         )
     except Exception:
         pass
