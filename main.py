@@ -144,6 +144,17 @@ async def search_elus(request: Request, q: str = Query(..., min_length=3)):
     ][:10]
     return {"resultats": resultats}
 
+@app.get("/debug-casier")
+async def debug_casier(request: Request):
+    import traceback, shutil
+    chromium_path = shutil.which("chromium") or shutil.which("chromium-browser") or "introuvable"
+    try:
+        from sources.casier import get_casier_politique_info
+        result = await asyncio.wait_for(get_casier_politique_info("marine le pen"), timeout=90)
+        return {"chromium": chromium_path, "result": result}
+    except Exception as e:
+        return {"chromium": chromium_path, "erreur": str(e), "trace": traceback.format_exc()}
+
 @app.get("/affaires")
 @limiter.limit("30/minute")
 async def get_affaires(request: Request):
