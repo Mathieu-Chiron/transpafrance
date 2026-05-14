@@ -7,8 +7,6 @@ HEADERS = {"User-Agent": "PoliticianAPI/1.0 (contact@example.com)"}
 DATASET_LABELS = {
     "eu_fsf":               "Liste de sanctions UE",
     "fr_tresor_gels_avoir": "Gel d'avoirs — Trésor français",
-    "un_sc_sanctions":      "Sanctions Conseil de sécurité ONU",
-    "eu_eeas_sanctions":    "Sanctions SEAE (UE)",
 }
 
 
