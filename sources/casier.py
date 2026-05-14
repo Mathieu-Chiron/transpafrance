@@ -22,9 +22,10 @@ _DOM_EXTRACTOR = """
         const chips  = Array.from(content.querySelectorAll('.q-chip'))
                             .map(c => c.textContent.trim());
 
-        // Description : dernier paragraphe hors header et titre
-        const paras  = Array.from(content.querySelectorAll('p, .nicegui-markdown p'));
-        const desc   = paras.map(p => p.textContent.trim()).filter(t => t.length > 20).join(' ');
+        // Résumé : dernier div.nicegui-markdown (≠ celui du titre h4)
+        const markdowns = Array.from(content.querySelectorAll('div.nicegui-markdown'));
+        const descEl    = markdowns.length > 1 ? markdowns[markdowns.length - 1] : null;
+        const desc      = descEl ? descEl.textContent.trim() : '';
 
         results.push({
             nom:     el.textContent.trim(),
@@ -57,10 +58,11 @@ def _build_entry(raw: dict) -> dict:
     infraction = next((c for c in chips if not any(x in c for x in ["ans", "€", "💰", "🗳️", "mois"])), "")
     desc    = raw.get("desc", "")
 
-    parts = [p for p in [affaire, peine, infraction, desc] if p]
+    parts = [p for p in [affaire, peine, infraction] if p]
 
     return {
         "description": " | ".join(parts),
+        "resume":      desc,
         "nom":         raw.get("nom", ""),
         "parti":       raw.get("parti", ""),
         "affaire":     affaire,
