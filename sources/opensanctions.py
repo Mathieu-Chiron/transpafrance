@@ -5,12 +5,9 @@ OS_API  = "https://api.opensanctions.org"
 HEADERS = {"User-Agent": "PoliticianAPI/1.0 (contact@example.com)"}
 
 DATASET_LABELS = {
-    "us_ofac_sdn":          "Liste OFAC (sanctions américaines)",
     "eu_fsf":               "Liste de sanctions UE",
-    "interpol_red_notices": "Notice rouge Interpol",
     "fr_tresor_gels_avoir": "Gel d'avoirs — Trésor français",
     "un_sc_sanctions":      "Sanctions Conseil de sécurité ONU",
-    "gb_hmt_sanctions":     "Sanctions HM Treasury (Royaume-Uni)",
     "eu_eeas_sanctions":    "Sanctions SEAE (UE)",
 }
 
@@ -55,7 +52,9 @@ async def get_opensanctions_info(name: str, qid: str | None = None) -> dict:
 
             if is_target and datasets:
                 for ds in datasets:
-                    label = DATASET_LABELS.get(ds, ds.replace("_", " ").title())
+                    label = DATASET_LABELS.get(ds)
+                    if not label:
+                        continue  # ignorer les datasets hors périmètre France/EU
                     affaires.append({
                         "description": f"Inscrit sur : {label}",
                         "source":      "opensanctions",
