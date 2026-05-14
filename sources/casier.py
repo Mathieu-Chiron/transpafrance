@@ -1,6 +1,9 @@
 import asyncio
+import os
 import re
 from playwright.async_api import async_playwright
+
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/app/playwright")
 
 SOURCE_URL = "https://casier-politique.fr"
 
