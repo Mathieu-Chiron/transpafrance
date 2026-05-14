@@ -133,11 +133,9 @@ async def _charger_index_elus():
 @app.on_event("startup")
 async def startup():
     import subprocess, sys
-    subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": "/app/playwright"},
-        check=False
-    )
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/app/playwright"
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
     asyncio.create_task(_charger_index_elus())
 
 @app.get("/search")
