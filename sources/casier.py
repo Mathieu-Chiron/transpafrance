@@ -10,32 +10,30 @@ RECOURS_RE = re.compile(r"\[.*?(appel|cassation|instance|cours|définitif).*?\]"
 # remonte au div.content parent pour parser l'entrée structurée.
 _DOM_EXTRACTOR = """
 (nom) => {
-    const results = [];
-    document.querySelectorAll('div.author').forEach(el => {
-        if (!el.textContent.trim().toLowerCase().includes(nom)) return;
-
-        const content = el.closest('div.content');
-        if (!content) return;
-
-        const h4     = content.querySelector('h4');
-        const party  = content.querySelector('a.party');
-        const chips  = Array.from(content.querySelectorAll('.q-chip'))
-                            .map(c => c.textContent.trim());
-
-        // Résumé : dernier div.nicegui-markdown (≠ celui du titre h4)
-        const markdowns = Array.from(content.querySelectorAll('div.nicegui-markdown'));
-        const descEl    = markdowns.length > 1 ? markdowns[markdowns.length - 1] : null;
-        const desc      = descEl ? descEl.textContent.trim() : '';
-
-        results.push({
-            nom:     el.textContent.trim(),
-            parti:   party  ? party.textContent.trim() : '',
-            affaire: h4     ? h4.textContent.trim()    : '',
-            chips:   chips,
-            desc:    desc,
+    try {
+        const results = [];
+        document.querySelectorAll('div.author').forEach(el => {
+            try {
+                if (!el.textContent.trim().toLowerCase().includes(nom)) return;
+                const content = el.closest('div.content');
+                if (!content) return;
+                const h4    = content.querySelector('h4');
+                const party = content.querySelector('a.party');
+                const chips = Array.from(content.querySelectorAll('.q-chip'))
+                                   .map(c => c.textContent.trim());
+                const mds   = Array.from(content.querySelectorAll('div.nicegui-markdown'));
+                const desc  = mds.length > 1 ? mds[mds.length - 1].textContent.trim() : '';
+                results.push({
+                    nom:     el.textContent.trim(),
+                    parti:   party ? party.textContent.trim() : '',
+                    affaire: h4    ? h4.textContent.trim()    : '',
+                    chips:   chips,
+                    desc:    desc,
+                });
+            } catch(e) {}
         });
-    });
-    return results;
+        return results;
+    } catch(e) { return []; }
 }
 """
 
@@ -84,8 +82,8 @@ async def _scraper_toutes_pages(name: str) -> list:
         page.set_default_timeout(8000)
 
         try:
-            await page.goto(SOURCE_URL, wait_until="networkidle", timeout=15000)
-            await page.wait_for_timeout(2000)
+            await page.goto(SOURCE_URL, wait_until="networkidle", timeout=20000)
+            await page.wait_for_timeout(1500)
 
             nb_pages = 16
             try:
@@ -108,7 +106,7 @@ async def _scraper_toutes_pages(name: str) -> list:
                         for b in await page.query_selector_all("button, span, a"):
                             if (await b.inner_text()).strip() == str(num_page):
                                 await b.click()
-                                await page.wait_for_timeout(1500)
+                                await page.wait_for_timeout(800)
                                 clique = True
                                 break
                         if not clique:
